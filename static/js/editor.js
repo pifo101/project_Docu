@@ -6,13 +6,56 @@ const viewerState = document.querySelector("[data-viewer-state]");
 const documentName = document.querySelector("[data-document-name]");
 const documentStatus = document.querySelector("[data-document-status]");
 const viewer = document.querySelector(".pdf-viewer");
-const signatureTool = document.querySelector('[data-field-type="signature"]');
+const fieldTools = [...document.querySelectorAll("[data-field-type]")];
 const continueButton = document.querySelector("[data-editor-continue]");
+const editorFeedback = document.querySelector("[data-editor-feedback]");
+const propertiesEmpty = document.querySelector("[data-properties-empty]");
+const propertiesContent = document.querySelector("[data-properties-content]");
+const propertyType = document.querySelector("[data-property-type]");
+const propertyRequired = document.querySelector("[data-property-required]");
+const textProperty = document.querySelector("[data-text-property]");
+const propertyLabel = document.querySelector("[data-property-label]");
+const propertyDelete = document.querySelector("[data-property-delete]");
 const documentFields = [];
-const defaultFieldWidth = 180;
-const defaultFieldHeight = 58;
-const minimumFieldWidth = 120;
-const minimumFieldHeight = 44;
+const FIELD_TYPES = {
+    signature: {
+        label: "Firma",
+        description: "Campo de firma",
+        width: 180,
+        height: 58,
+        minWidth: 120,
+        minHeight: 44,
+        icon: '<svg viewBox="0 0 24 24"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg>',
+    },
+    name: {
+        label: "Nombre",
+        description: "Campo de nombre",
+        width: 170,
+        height: 48,
+        minWidth: 110,
+        minHeight: 38,
+        icon: '<span class="document-field__icon-letter">Aa</span>',
+    },
+    date: {
+        label: "Fecha",
+        description: "Campo de fecha",
+        width: 145,
+        height: 48,
+        minWidth: 100,
+        minHeight: 38,
+        icon: '<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 2v4M16 2v4M5 9h14M9 13h2M13 13h2"/></svg>',
+    },
+    text: {
+        label: "Texto",
+        description: "Campo de texto",
+        width: 180,
+        height: 48,
+        minWidth: 110,
+        minHeight: 38,
+        defaultLabel: "Texto",
+        icon: '<span class="document-field__icon-letter">T</span>',
+    },
+};
 let loadedPdf = null;
 let pdfObjectUrl = null;
 let renderVersion = 0;
@@ -30,9 +73,9 @@ function roundNormalized(value) {
     return Number(clamp(value, 0, 1).toFixed(6));
 }
 
-function createFieldId() {
+function createFieldId(type) {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-    return `signature-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${type}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function getNormalizedFieldData(fieldElement) {
@@ -43,8 +86,8 @@ function getNormalizedFieldData(fieldElement) {
     const y = roundNormalized(parseFloat(fieldElement.style.top) / layerHeight);
     const width = parseFloat(fieldElement.style.width) / layerWidth;
     const height = parseFloat(fieldElement.style.height) / layerHeight;
-
-    return {
+    const existingField = documentFields.find((field) => field.id === fieldElement.dataset.id);
+    const normalizedField = {
         id: fieldElement.dataset.id,
         type: fieldElement.dataset.type,
         page: Number(layer.dataset.page),
@@ -52,7 +95,13 @@ function getNormalizedFieldData(fieldElement) {
         y,
         width: roundNormalized(Math.min(width, 1 - x)),
         height: roundNormalized(Math.min(height, 1 - y)),
+        required: existingField?.required ?? fieldElement.dataset.required !== "false",
     };
+
+    if (normalizedField.type === "text") {
+        normalizedField.label = existingField?.label ?? fieldElement.dataset.label ?? FIELD_TYPES.text.defaultLabel;
+    }
+    return normalizedField;
 }
 
 function updateFieldState(fieldElement) {
@@ -70,12 +119,25 @@ function setFieldPixels(fieldElement, left, top, width, height) {
     fieldElement.style.height = `${height}px`;
 }
 
+function normalizeTextLabel(fieldElement) {
+    if (!fieldElement || fieldElement.dataset.type !== "text") return;
+
+    const fieldData = documentFields.find((field) => field.id === fieldElement.dataset.id);
+    if (!fieldData) return;
+
+    fieldData.label = fieldData.label.trim() || FIELD_TYPES.text.defaultLabel;
+    updateFieldPresentation(fieldElement, fieldData);
+    if (selectedField === fieldElement) propertyLabel.value = fieldData.label;
+}
+
 function setSelectedField(fieldElement) {
+    if (selectedField !== fieldElement) normalizeTextLabel(selectedField);
     selectedField?.classList.remove("document-field--selected");
     selectedField?.setAttribute("aria-selected", "false");
     selectedField = fieldElement;
     selectedField?.classList.add("document-field--selected");
     selectedField?.setAttribute("aria-selected", "true");
+    updatePropertiesPanel();
 }
 
 function removeField(fieldElement) {
@@ -84,21 +146,32 @@ function removeField(fieldElement) {
     if (activeInteraction?.fieldElement === fieldElement) cancelActiveInteraction();
     const fieldIndex = documentFields.findIndex((field) => field.id === fieldElement.dataset.id);
     if (fieldIndex >= 0) documentFields.splice(fieldIndex, 1);
-    if (selectedField === fieldElement) selectedField = null;
+    if (selectedField === fieldElement) setSelectedField(null);
     fieldElement.remove();
 }
 
-function signatureFieldMarkup() {
+function fieldMarkup(fieldData) {
+    const config = FIELD_TYPES[fieldData.type];
     return `
-        <span class="document-field__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg>
-        </span>
-        <span class="document-field__label"><strong>Firma</strong><small>Campo de firma</small></span>
-        <button class="document-field__delete" type="button" aria-label="Eliminar campo de firma">
+        <span class="document-field__icon" aria-hidden="true">${config.icon}</span>
+        <span class="document-field__label"><strong></strong><small></small></span>
+        <button class="document-field__delete" type="button" aria-label="Eliminar campo ${config.label}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13M11 11v5M14 11v5"/></svg>
         </button>
-        <button class="field-resize-handle" type="button" aria-label="Redimensionar campo de firma"></button>
+        <button class="field-resize-handle" type="button" aria-label="Redimensionar campo ${config.label}"></button>
     `;
+}
+
+function updateFieldPresentation(fieldElement, fieldData) {
+    const config = FIELD_TYPES[fieldData.type];
+    const visibleLabel = fieldData.type === "text" ? fieldData.label || config.defaultLabel : config.label;
+
+    fieldElement.dataset.required = String(fieldData.required);
+    if (fieldData.type === "text") fieldElement.dataset.label = fieldData.label;
+    fieldElement.querySelector(".document-field__label strong").textContent = visibleLabel;
+    fieldElement.querySelector(".document-field__label small").textContent =
+        `${config.description} · ${fieldData.required ? "Obligatorio" : "Opcional"}`;
+    fieldElement.setAttribute("aria-label", `${visibleLabel} en página ${fieldData.page}`);
 }
 
 function createFieldElement(fieldData, layer) {
@@ -106,14 +179,14 @@ function createFieldElement(fieldData, layer) {
     const layerWidth = layer.clientWidth;
     const layerHeight = layer.clientHeight;
 
-    fieldElement.className = "document-field signature-field";
+    fieldElement.className = `document-field document-field--${fieldData.type}`;
     fieldElement.dataset.id = fieldData.id;
     fieldElement.dataset.type = fieldData.type;
     fieldElement.tabIndex = 0;
     fieldElement.setAttribute("role", "group");
-    fieldElement.setAttribute("aria-label", `Firma en página ${fieldData.page}`);
     fieldElement.setAttribute("aria-selected", "false");
-    fieldElement.innerHTML = signatureFieldMarkup();
+    fieldElement.innerHTML = fieldMarkup(fieldData);
+    updateFieldPresentation(fieldElement, fieldData);
     setFieldPixels(
         fieldElement,
         fieldData.x * layerWidth,
@@ -134,21 +207,24 @@ function renderFieldsForLayer(layer) {
         .forEach((field) => layer.append(createFieldElement(field, layer)));
 }
 
-function createSignatureField(layer, clientX, clientY) {
+function createDocumentField(type, layer, clientX, clientY) {
+    const config = FIELD_TYPES[type];
     const layerRect = layer.getBoundingClientRect();
-    const width = Math.min(defaultFieldWidth, layerRect.width);
-    const height = Math.min(defaultFieldHeight, layerRect.height);
+    const width = Math.min(config.width, layerRect.width);
+    const height = Math.min(config.height, layerRect.height);
     const left = clamp(clientX - layerRect.left - width / 2, 0, layerRect.width - width);
     const top = clamp(clientY - layerRect.top - height / 2, 0, layerRect.height - height);
     const fieldData = {
-        id: createFieldId(),
-        type: "signature",
+        id: createFieldId(type),
+        type,
         page: Number(layer.dataset.page),
         x: 0,
         y: 0,
         width: 0,
         height: 0,
+        required: true,
     };
+    if (type === "text") fieldData.label = config.defaultLabel;
     const fieldElement = createFieldElement(fieldData, layer);
 
     layer.append(fieldElement);
@@ -156,6 +232,7 @@ function createSignatureField(layer, clientX, clientY) {
     documentFields.push(getNormalizedFieldData(fieldElement));
     setSelectedField(fieldElement);
     fieldElement.focus({ preventScroll: true });
+    hideEditorFeedback();
 }
 
 function getFieldPixels(fieldElement) {
@@ -189,15 +266,17 @@ function startFieldInteraction(event) {
     fieldElement.classList.add(activeInteraction.mode === "resize" ? "document-field--resizing" : "document-field--moving");
 }
 
-function createDragPreview() {
+function createDragPreview(type) {
+    const config = FIELD_TYPES[type];
     const preview = document.createElement("div");
-    preview.className = "field-drag-preview";
+    preview.className = `field-drag-preview field-drag-preview--${type}`;
+    preview.style.width = `${config.width}px`;
+    preview.style.height = `${config.height}px`;
     preview.innerHTML = `
-        <span class="field-drag-preview__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg>
-        </span>
-        <span class="field-drag-preview__label"><strong>Firma</strong><small>Suelta sobre una página</small></span>
+        <span class="field-drag-preview__icon" aria-hidden="true">${config.icon}</span>
+        <span class="field-drag-preview__label"><strong></strong><small>Suelta sobre una página</small></span>
     `;
+    preview.querySelector("strong").textContent = config.label;
     document.body.append(preview);
     return preview;
 }
@@ -206,23 +285,29 @@ function findLayerAtPoint(clientX, clientY) {
     return document.elementFromPoint(clientX, clientY)?.closest(".field-layer") || null;
 }
 
-function startSignatureDrag(event) {
+function startToolDrag(event) {
     if (activeInteraction || !event.isPrimary || event.button !== 0 || !loadedPdf || pdfDocumentElement.hidden) return;
+
+    const sourceTool = event.currentTarget;
+    const type = sourceTool.dataset.fieldType;
+    if (!FIELD_TYPES[type]) return;
 
     event.preventDefault();
     setSelectedField(null);
-    signatureTool.setPointerCapture(event.pointerId);
-    signatureTool.classList.add("field-tool--dragging");
+    sourceTool.setPointerCapture(event.pointerId);
+    sourceTool.classList.add("field-tool--dragging");
     activeInteraction = {
         mode: "create",
+        type,
         pointerId: event.pointerId,
-        preview: createDragPreview(),
+        sourceTool,
+        preview: createDragPreview(type),
         targetLayer: null,
     };
-    moveSignaturePreview(event);
+    moveFieldPreview(event);
 }
 
-function moveSignaturePreview(event) {
+function moveFieldPreview(event) {
     const interaction = activeInteraction;
     interaction.preview.style.left = `${event.clientX}px`;
     interaction.preview.style.top = `${event.clientY}px`;
@@ -288,10 +373,11 @@ function movePlacedField(event) {
 
 function resizePlacedField(event) {
     const { fieldElement, layer, initial, startX, startY } = activeInteraction;
+    const config = FIELD_TYPES[fieldElement.dataset.type];
     const maximumWidth = layer.clientWidth - initial.left;
     const maximumHeight = layer.clientHeight - initial.top;
-    const minimumWidth = Math.min(initial.width, minimumFieldWidth, maximumWidth);
-    const minimumHeight = Math.min(initial.height, minimumFieldHeight, maximumHeight);
+    const minimumWidth = Math.min(initial.width, config.minWidth, maximumWidth);
+    const minimumHeight = Math.min(initial.height, config.minHeight, maximumHeight);
     const width = clamp(initial.width + event.clientX - startX, minimumWidth, maximumWidth);
     const height = clamp(initial.height + event.clientY - startY, minimumHeight, maximumHeight);
 
@@ -303,7 +389,7 @@ function handlePointerMove(event) {
     if (!activeInteraction || event.pointerId !== activeInteraction.pointerId) return;
     event.preventDefault();
 
-    if (activeInteraction.mode === "create") moveSignaturePreview(event);
+    if (activeInteraction.mode === "create") moveFieldPreview(event);
     if (activeInteraction.mode === "move") movePlacedField(event);
     if (activeInteraction.mode === "resize") resizePlacedField(event);
 }
@@ -318,10 +404,10 @@ function finishInteraction(event) {
     if (interaction.mode === "create") {
         interaction.targetLayer?.classList.remove("field-layer--drop-target");
         interaction.preview.remove();
-        signatureTool.classList.remove("field-tool--dragging");
+        interaction.sourceTool.classList.remove("field-tool--dragging");
         const dropLayer = findLayerAtPoint(event.clientX, event.clientY);
         if (dropLayer && event.type === "pointerup") {
-            createSignatureField(dropLayer, event.clientX, event.clientY);
+            createDocumentField(interaction.type, dropLayer, event.clientX, event.clientY);
         }
         return;
     }
@@ -345,11 +431,46 @@ function cancelActiveInteraction() {
     if (interaction.fieldElement?.hasPointerCapture(interaction.pointerId)) {
         interaction.fieldElement.releasePointerCapture(interaction.pointerId);
     }
-    if (interaction.mode === "create" && signatureTool?.hasPointerCapture(interaction.pointerId)) {
-        signatureTool.releasePointerCapture(interaction.pointerId);
+    if (interaction.mode === "create" && interaction.sourceTool.hasPointerCapture(interaction.pointerId)) {
+        interaction.sourceTool.releasePointerCapture(interaction.pointerId);
     }
-    signatureTool?.classList.remove("field-tool--dragging");
+    interaction.sourceTool?.classList.remove("field-tool--dragging");
     activeInteraction = null;
+}
+
+function updatePropertiesPanel() {
+    const fieldData = selectedField
+        ? documentFields.find((field) => field.id === selectedField.dataset.id)
+        : null;
+
+    propertiesEmpty.hidden = Boolean(fieldData);
+    propertiesContent.hidden = !fieldData;
+    if (!fieldData) return;
+
+    propertyType.textContent = FIELD_TYPES[fieldData.type].label;
+    propertyRequired.checked = fieldData.required;
+    textProperty.hidden = fieldData.type !== "text";
+    propertyLabel.value = fieldData.type === "text" ? fieldData.label : "";
+}
+
+function updateSelectedProperty(property, value) {
+    if (!selectedField) return;
+
+    const fieldData = documentFields.find((field) => field.id === selectedField.dataset.id);
+    if (!fieldData) return;
+
+    fieldData[property] = value;
+    updateFieldPresentation(selectedField, fieldData);
+}
+
+function showEditorFeedback(message) {
+    editorFeedback.textContent = message;
+    editorFeedback.hidden = false;
+}
+
+function hideEditorFeedback() {
+    editorFeedback.hidden = true;
+    editorFeedback.textContent = "";
 }
 
 function showState(message, type = "loading") {
@@ -401,7 +522,7 @@ async function renderPages() {
 
     cancelActiveInteraction();
     setSelectedField(null);
-    signatureTool.disabled = true;
+    fieldTools.forEach((tool) => { tool.disabled = true; });
     continueButton.disabled = true;
     const currentVersion = ++renderVersion;
     const availableWidth = Math.max(240, pdfDocumentElement.clientWidth);
@@ -450,7 +571,7 @@ async function renderPages() {
     if (currentVersion !== renderVersion) return;
     viewerState.hidden = true;
     documentStatus.textContent = "Documento listo";
-    signatureTool.disabled = false;
+    fieldTools.forEach((tool) => { tool.disabled = false; });
     continueButton.disabled = false;
 }
 
@@ -495,12 +616,12 @@ function scheduleResize() {
     }, 180);
 }
 
-signatureTool?.addEventListener("pointerdown", startSignatureDrag);
+fieldTools.forEach((tool) => tool.addEventListener("pointerdown", startToolDrag));
 document.addEventListener("pointermove", handlePointerMove);
 document.addEventListener("pointerup", finishInteraction);
 document.addEventListener("pointercancel", finishInteraction);
 document.addEventListener("pointerdown", (event) => {
-    if (!event.target.closest(".document-field")) setSelectedField(null);
+    if (!event.target.closest(".document-field, .field-properties")) setSelectedField(null);
 });
 document.addEventListener("keydown", (event) => {
     const target = event.target;
@@ -512,7 +633,23 @@ document.addEventListener("keydown", (event) => {
         removeField(selectedField);
     }
 });
+propertyRequired?.addEventListener("change", () => {
+    updateSelectedProperty("required", propertyRequired.checked);
+});
+propertyLabel?.addEventListener("input", () => {
+    updateSelectedProperty("label", propertyLabel.value.slice(0, 60));
+});
+propertyLabel?.addEventListener("blur", () => {
+    normalizeTextLabel(selectedField);
+});
+propertyDelete?.addEventListener("click", () => removeField(selectedField));
 continueButton?.addEventListener("click", () => {
+    if (documentFields.length === 0) {
+        showEditorFeedback("Agrega al menos un campo al documento para continuar.");
+        return;
+    }
+
+    hideEditorFeedback();
     const normalizedFields = documentFields.map((field) => ({ ...field }));
     console.log("Campos normalizados:", normalizedFields);
     console.table(normalizedFields);
