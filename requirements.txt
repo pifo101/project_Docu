@@ -1,1 +1,2 @@
-Django>=5.2,<6.0
+# Django 5.2 is the LTS series used by this project.
+Django>=5.2,<5.3

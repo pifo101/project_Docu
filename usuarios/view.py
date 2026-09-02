@@ -7,3 +7,11 @@ def login_view(request):
 
 def register_view(request):
     return render(request, "usuarios/register.html")
+
+
+def dashboard_view(request):
+    return render(request, "usuarios/dashboard.html")
+
+
+def profile_view(request):
+    return render(request, "usuarios/profile.html")
