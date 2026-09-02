@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Editor de documento | ADICLA Sign{% endblock %}
+{% block body_class %}editor-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}">{% endblock %}
+
+{% block content %}
+<div class="editor-shell">
+    <header class="editor-header">
+        <a class="editor-back" href="{% url 'usuarios:dashboard' %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+            <span>Volver</span>
+        </a>
+        <div class="editor-document" aria-live="polite">
+            <span class="editor-document__icon" aria-hidden="true">PDF</span>
+            <div>
+                <small data-document-status>Preparando documento</small>
+                <strong data-document-name>Documento PDF</strong>
+            </div>
+        </div>
+        <button class="editor-continue" type="button" title="Disponible en una próxima etapa" disabled>Continuar</button>
+    </header>
+
+    <main class="editor-workspace">
+        <aside class="field-panel" aria-labelledby="fields-title">
+            <div class="field-panel__heading">
+                <span>Paso 1</span>
+                <h1 id="fields-title">Campos</h1>
+                <p>Estas herramientas estarán disponibles próximamente.</p>
+            </div>
+            <div class="field-list" aria-label="Campos próximamente disponibles">
+                <button class="field-tool" type="button" disabled>
+                    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg></span>
+                    Firma
+                    <small>Próximamente</small>
+                </button>
+                <button class="field-tool" type="button" disabled>
+                    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3-7 8-7s8 3 8 7"/></svg></span>
+                    Nombre
+                    <small>Próximamente</small>
+                </button>
+                <button class="field-tool" type="button" disabled>
+                    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 2v4M16 2v4M5 9h14M9 13h2M13 13h2M9 16h2"/></svg></span>
+                    Fecha
+                    <small>Próximamente</small>
+                </button>
+                <button class="field-tool" type="button" disabled>
+                    <span class="field-tool__letter" aria-hidden="true">T</span>
+                    Texto
+                    <small>Próximamente</small>
+                </button>
+            </div>
+            <div class="field-panel__note">
+                <span aria-hidden="true">i</span>
+                <p>Primero revisa que todas las páginas del documento se visualicen correctamente.</p>
+            </div>
+        </aside>
+
+        <section class="pdf-viewer" aria-label="Visor del documento PDF">
+            <div class="viewer-state" data-viewer-state role="status" aria-live="polite">
+                <span class="viewer-state__spinner" aria-hidden="true"></span>
+                <strong>Preparando documento...</strong>
+            </div>
+            <div class="pdf-document" data-pdf-document hidden>
+                <div class="pdf-page" data-page="template" hidden>
+                    <canvas class="pdf-canvas"></canvas>
+                    <div class="field-layer"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script src="{% static 'js/editor.js' %}" defer></script>
+{% endblock %}

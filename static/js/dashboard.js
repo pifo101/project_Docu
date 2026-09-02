@@ -30,16 +30,24 @@ const selectedMeta = selectedFile?.querySelector("small");
 const removeFileButton = document.querySelector(".selected-file__remove");
 const continueButton = document.querySelector(".upload-continue");
 const maxFileSize = 20 * 1024 * 1024;
+const editorDatabaseName = "adicla-sign-editor";
+const editorStoreName = "temporary-documents";
+const editorDocumentKey = "current-pdf";
 let dragDepth = 0;
+let currentPdf = null;
 
 function resetUpload() {
     uploadForm?.reset();
     dragDepth = 0;
+    currentPdf = null;
     dropZone?.classList.remove("drop-zone--active", "drop-zone--error");
     uploadInput?.removeAttribute("aria-invalid");
     if (uploadError) uploadError.textContent = "";
     if (selectedFile) selectedFile.hidden = true;
-    if (continueButton) continueButton.disabled = true;
+    if (continueButton) {
+        continueButton.disabled = true;
+        continueButton.textContent = "Continuar";
+    }
 }
 
 function showUploadError(message) {
@@ -75,6 +83,39 @@ function selectPdf(file) {
     if (selectedMeta) selectedMeta.textContent = `${formatFileSize(file.size)} · PDF`;
     if (selectedFile) selectedFile.hidden = false;
     if (continueButton) continueButton.disabled = false;
+    currentPdf = file;
+}
+
+function storePdfForEditor(file) {
+    return new Promise((resolve, reject) => {
+        const openRequest = indexedDB.open(editorDatabaseName, 1);
+
+        openRequest.addEventListener("upgradeneeded", () => {
+            if (!openRequest.result.objectStoreNames.contains(editorStoreName)) {
+                openRequest.result.createObjectStore(editorStoreName);
+            }
+        });
+        openRequest.addEventListener("error", () => reject(openRequest.error));
+        openRequest.addEventListener("success", () => {
+            const database = openRequest.result;
+            const transaction = database.transaction(editorStoreName, "readwrite");
+            const store = transaction.objectStore(editorStoreName);
+
+            store.put({ file, name: file.name }, editorDocumentKey);
+            transaction.addEventListener("complete", () => {
+                database.close();
+                resolve();
+            });
+            transaction.addEventListener("error", () => {
+                database.close();
+                reject(transaction.error);
+            });
+            transaction.addEventListener("abort", () => {
+                database.close();
+                reject(transaction.error);
+            });
+        });
+    });
 }
 
 document.querySelector("[data-upload-open]")?.addEventListener("click", () => {
@@ -131,4 +172,28 @@ dropZone?.addEventListener("drop", (event) => {
 removeFileButton?.addEventListener("click", () => {
     resetUpload();
     uploadInput?.focus();
+});
+
+continueButton?.addEventListener("click", async () => {
+    if (!currentPdf) return;
+
+    continueButton.disabled = true;
+    continueButton.textContent = "Preparando...";
+
+    try {
+        await storePdfForEditor(currentPdf);
+        uploadDialog?.close();
+        window.location.assign(continueButton.dataset.editorUrl);
+    } catch (error) {
+        console.error("No se pudo preparar el PDF para el editor.", error);
+        if (uploadError) {
+            uploadError.textContent = "No se pudo abrir el editor. Intenta seleccionar el PDF nuevamente.";
+        }
+        continueButton.disabled = false;
+        continueButton.textContent = "Continuar";
+    }
+});
+
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted) resetUpload();
 });
