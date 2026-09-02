@@ -19,7 +19,7 @@
                 <strong data-document-name>Documento PDF</strong>
             </div>
         </div>
-        <button class="editor-continue" type="button" title="Disponible en una próxima etapa" disabled>Continuar</button>
+        <button class="editor-continue" type="button" data-editor-continue disabled>Continuar</button>
     </header>
 
     <main class="editor-workspace">
@@ -27,13 +27,13 @@
             <div class="field-panel__heading">
                 <span>Paso 1</span>
                 <h1 id="fields-title">Campos</h1>
-                <p>Estas herramientas estarán disponibles próximamente.</p>
+                <p>Arrastra una firma y colócala sobre el documento.</p>
             </div>
-            <div class="field-list" aria-label="Campos próximamente disponibles">
-                <button class="field-tool" type="button" disabled>
+            <div class="field-list" aria-label="Campos del documento">
+                <button class="field-tool field-tool--active" type="button" data-field-type="signature" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg></span>
                     Firma
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
                 <button class="field-tool" type="button" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3-7 8-7s8 3 8 7"/></svg></span>
@@ -53,7 +53,7 @@
             </div>
             <div class="field-panel__note">
                 <span aria-hidden="true">i</span>
-                <p>Primero revisa que todas las páginas del documento se visualicen correctamente.</p>
+                <p>Selecciona una firma para moverla, cambiar su tamaño o eliminarla.</p>
             </div>
         </aside>
 
@@ -65,7 +65,7 @@
             <div class="pdf-document" data-pdf-document hidden>
                 <div class="pdf-page" data-page="template" hidden>
                     <canvas class="pdf-canvas"></canvas>
-                    <div class="field-layer"></div>
+                    <div class="field-layer" data-page="template"></div>
                 </div>
             </div>
         </section>

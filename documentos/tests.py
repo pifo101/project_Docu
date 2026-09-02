@@ -9,4 +9,6 @@ class EditorPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Preparando documento...")
         self.assertContains(response, 'class="field-layer"')
+        self.assertContains(response, 'data-field-type="signature"')
+        self.assertContains(response, "data-editor-continue")
         self.assertContains(response, "pdf.min.js")
