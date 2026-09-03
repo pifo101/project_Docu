@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar sesión | ADICLA Sign{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+    <section class="brand-panel" aria-labelledby="brand-heading">
+        <a class="brand" href="{% url 'usuarios:login' %}" aria-label="ADICLA Sign, inicio">
+            <span class="brand__mark" aria-hidden="true">
+                <svg viewBox="0 0 32 32" role="img"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg>
+            </span>
+            <span>ADICLA <strong>Sign</strong></span>
+        </a>
+
+        <div class="brand-panel__content">
+            <span class="eyebrow">Firma digital simple</span>
+            <h1 id="brand-heading">Tus acuerdos avanzan.<br><span>Sin papel, sin esperas.</span></h1>
+            <p>Prepara, envía y firma documentos desde cualquier lugar, con la seguridad que tu equipo necesita.</p>
+        </div>
+
+        <div class="document-preview" aria-hidden="true">
+            <div class="document-preview__top"><i></i><i></i><i></i></div>
+            <div class="document-preview__title"></div>
+            <div class="document-preview__line document-preview__line--long"></div>
+            <div class="document-preview__line"></div>
+            <div class="signature-box">
+                <svg viewBox="0 0 180 50"><path d="M7 37c20-33 9 15 31-15 12-17-4 27 18 5 12-12 7 8 23 5 18-4 27-16 41-18 8-1-1 12 17 12 13 0 22-5 36-9"/></svg>
+                <span>Firma completada</span>
+            </div>
+        </div>
+
+        <p class="brand-panel__footer">Documentos protegidos y cifrados</p>
+    </section>
+
+    <section class="form-panel">
+        <div class="form-card">
+            <div class="form-card__heading">
+                <span class="mobile-brand">ADICLA <strong>Sign</strong></span>
+                <p class="overline">Bienvenido de nuevo</p>
+                <h2>Inicia sesión</h2>
+                <p>Accede a tus documentos y firmas pendientes.</p>
+            </div>
+
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+                <div class="field">
+                    <label for="email">Correo electrónico</label>
+                    <div class="field__control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/></svg>
+                        <input id="email" name="email" type="email" placeholder="nombre@empresa.com" autocomplete="email" required autofocus>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field__label-row">
+                        <label for="password">Contraseña</label>
+                        <a href="#">¿Olvidaste tu contraseña?</a>
+                    </div>
+                    <div class="field__control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+                        <input id="password" name="password" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" required>
+                        <button class="password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <label class="check-control">
+                    <input type="checkbox" name="remember">
+                    <span>Recordarme en este dispositivo</span>
+                </label>
+
+                <button class="primary-button" type="submit">
+                    Iniciar sesión
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+                </button>
+            </form>
+
+            <p class="form-card__switch">¿Aún no tienes una cuenta? <a href="{% url 'usuarios:register' %}">Crear cuenta</a></p>
+            <p class="legal-copy">Al continuar aceptas nuestros <a href="#">Términos de uso</a> y <a href="#">Política de privacidad</a>.</p>
+        </div>
+    </section>
+</main>
+{% endblock %}
