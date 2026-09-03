@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "auditoria",
 ]
 
+AUTH_USER_MODEL = "usuarios.Usuario"
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -73,32 +75,54 @@ WSGI_APPLICATION = "config.wsgi.application"
 DB_ENGINE = os.getenv("DB_ENGINE", "sqlite")
 
 if DB_ENGINE == "mssql":
-    required_database_settings = ["DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST"]
+    db_auth = os.getenv("DB_AUTH", "sql").lower()
+
+    required_database_settings = ["DB_NAME", "DB_HOST"]
+
+    if db_auth == "sql":
+        required_database_settings += ["DB_USER", "DB_PASSWORD"]
+
     missing_database_settings = [
-        setting for setting in required_database_settings if not os.getenv(setting)
+        setting
+        for setting in required_database_settings
+        if not os.getenv(setting)
     ]
+
     if missing_database_settings:
         raise ImproperlyConfigured(
             "Missing SQL Server environment variables: "
             + ", ".join(missing_database_settings)
         )
 
-    DATABASES = {
-        "default": {
-            "ENGINE": "mssql",
-            "NAME": os.environ["DB_NAME"],
-            "USER": os.environ["DB_USER"],
-            "PASSWORD": os.environ["DB_PASSWORD"],
-            "HOST": os.environ["DB_HOST"],
-            "PORT": os.getenv("DB_PORT", "1433"),
-            "OPTIONS": {
-                "driver": os.getenv("DB_DRIVER", "ODBC Driver 18 for SQL Server"),
-                "extra_params": os.getenv(
-                    "DB_EXTRA_PARAMS", "Encrypt=yes;TrustServerCertificate=no"
-                ),
-            },
-        }
+    database_config = {
+        "ENGINE": "mssql",
+        "NAME": os.environ["DB_NAME"],
+        "HOST": os.environ["DB_HOST"],
+        "PORT": os.getenv("DB_PORT", ""),
+        "OPTIONS": {
+            "driver": os.getenv(
+                "DB_DRIVER",
+                "ODBC Driver 18 for SQL Server",
+            ),
+            "extra_params": os.getenv(
+                "DB_EXTRA_PARAMS",
+                "Encrypt=yes;TrustServerCertificate=yes",
+            ),
+        },
     }
+
+    if db_auth == "sql":
+        database_config["USER"] = os.environ["DB_USER"]
+        database_config["PASSWORD"] = os.environ["DB_PASSWORD"]
+    elif db_auth != "windows":
+        raise ImproperlyConfigured(
+            f"Unsupported DB_AUTH: {db_auth}"
+        )
+
+    DATABASES = {
+        "default": database_config
+    }
+
 elif DB_ENGINE == "sqlite":
     DATABASES = {
         "default": {
@@ -106,8 +130,11 @@ elif DB_ENGINE == "sqlite":
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
 else:
-    raise ImproperlyConfigured(f"Unsupported DB_ENGINE: {DB_ENGINE}")
+    raise ImproperlyConfigured(
+        f"Unsupported DB_ENGINE: {DB_ENGINE}"
+    )
 
 LANGUAGE_CODE = "es-gt"
 TIME_ZONE = "America/Guatemala"
