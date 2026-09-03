@@ -1,0 +1,16 @@
+<div class="notification-center">
+    <button class="icon-button" type="button" aria-label="Notificaciones, 3 sin leer" aria-haspopup="true" aria-expanded="false" data-notifications-toggle>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 00-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+        <span aria-hidden="true"></span><strong class="notification-count">3</strong>
+    </button>
+    <section class="notification-panel" aria-labelledby="notification-title" data-notifications-panel hidden>
+        <div class="notification-panel__header"><div><span>Centro de actividad</span><h2 id="notification-title">Notificaciones</h2></div><button type="button" data-mark-read>Marcar leídas</button></div>
+        <div class="notification-list">
+            <a class="notification-item notification-item--unread" href="{% url 'documentos:detail' %}"><i class="notification-item__icon notification-item__icon--success" aria-hidden="true">✓</i><span><strong>Documento firmado</strong><small>Convenio de confidencialidad</small><time>Hace 18 min</time></span></a>
+            <a class="notification-item notification-item--unread" href="{% url 'documentos:pending' %}"><i class="notification-item__icon" aria-hidden="true">!</i><span><strong>Firma pendiente</strong><small>Contrato de servicios 2026</small><time>Hace 2 h</time></span></a>
+            <a class="notification-item notification-item--unread" href="{% url 'documentos:detail' %}"><i class="notification-item__icon notification-item__icon--viewed" aria-hidden="true">○</i><span><strong>Documento visualizado</strong><small>Autorización de presupuesto</small><time>Ayer</time></span></a>
+            <a class="notification-item" href="{% url 'documentos:detail' %}"><i class="notification-item__icon notification-item__icon--warning" aria-hidden="true">⌛</i><span><strong>Solicitud próxima a expirar</strong><small>Orden de compra #1842</small><time>Hace 2 días</time></span></a>
+        </div>
+        <a class="notification-panel__footer" href="{% url 'documentos:detail' %}#activity">Ver toda la actividad</a>
+    </section>
+</div>

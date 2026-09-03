@@ -24,17 +24,17 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
                     Resumen
                 </a>
-                <a class="nav-link" href="{% url 'usuarios:dashboard' %}#documentos">
+                <a class="nav-link" href="{% url 'documentos:list' %}">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg>
                     Documentos
                     <span class="nav-link__count">8</span>
                 </a>
-                <a class="nav-link" href="{% url 'usuarios:dashboard' %}#pendientes">
+                <a class="nav-link" href="{% url 'documentos:pending' %}">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2"/></svg>
                     Pendientes
                     <span class="nav-link__count nav-link__count--accent">3</span>
                 </a>
-                <a class="nav-link" href="{% url 'usuarios:dashboard' %}#actividad">
+                <a class="nav-link" href="{% url 'documentos:detail' %}#activity">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
                     Actividad
                 </a>
@@ -113,6 +113,10 @@
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-5"/></svg>
                             Seguridad
                         </a>
+                        <a class="profile-nav__link" href="#preferencias">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></svg>
+                            Preferencias
+                        </a>
                     </nav>
 
                     <a class="logout-link" href="{% url 'usuarios:login' %}">
@@ -177,6 +181,10 @@
                         <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-5"/></svg></span>
                         <div><strong>Tu cuenta está protegida</strong><p>Último acceso: hoy a las 08:42 desde Ciudad de Guatemala.</p></div>
                         <button type="button">Revisar seguridad</button>
+                    </section>
+                    <section class="profile-panel preferences-panel" id="preferencias" aria-labelledby="preferences-title">
+                        <div class="profile-panel__header"><div><p class="panel__overline">Experiencia</p><h2 id="preferences-title">Preferencias</h2><span>Configura cómo deseas recibir avisos.</span></div></div>
+                        <div class="preferences-options"><label><span><strong>Notificaciones por correo</strong><small>Recibe avisos sobre firmas y vencimientos.</small></span><input type="checkbox" checked aria-label="Activar notificaciones por correo"></label><label><span><strong>Recordatorios de vencimiento</strong><small>Avisa cuando una solicitud esté próxima a expirar.</small></span><input type="checkbox" checked aria-label="Activar recordatorios de vencimiento"></label></div>
                     </section>
                 </div>
             </div>

@@ -697,3 +697,11 @@
         width: fit-content;
     }
 }
+.preferences-panel { overflow: hidden; }
+.preferences-options { display: grid; padding: 4px 22px 14px; }
+.preferences-options label { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #f0f1f3; cursor: pointer; }
+.preferences-options label:last-child { border-bottom: 0; }
+.preferences-options label > span { display: grid; gap: 4px; }
+.preferences-options strong { font-size: 11px; }
+.preferences-options small { color: #98a2b3; font-size: 9px; }
+.preferences-options input { width: 18px; height: 18px; accent-color: var(--color-primary); }

@@ -16,6 +16,10 @@ const propertyRequired = document.querySelector("[data-property-required]");
 const textProperty = document.querySelector("[data-text-property]");
 const propertyLabel = document.querySelector("[data-property-label]");
 const propertyDelete = document.querySelector("[data-property-delete]");
+const recipientNameElement = document.querySelector("[data-recipient-name]");
+const recipientEmailElement = document.querySelector("[data-recipient-email]");
+const recipientInitialsElement = document.querySelector("[data-recipient-initials]");
+const propertyRecipient = document.querySelector("[data-property-recipient]");
 const documentFields = [];
 const FIELD_TYPES = {
     signature: {
@@ -55,6 +59,24 @@ const FIELD_TYPES = {
         defaultLabel: "Texto",
         icon: '<span class="document-field__icon-letter">T</span>',
     },
+    initials: {
+        label: "Iniciales",
+        description: "Campo de iniciales",
+        width: 130,
+        height: 48,
+        minWidth: 90,
+        minHeight: 38,
+        icon: '<span class="document-field__icon-letter">AB</span>',
+    },
+    checkbox: {
+        label: "Checkbox",
+        description: "Casilla de verificación",
+        width: 155,
+        height: 48,
+        minWidth: 105,
+        minHeight: 38,
+        icon: '<svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 12l3 3 5-6"/></svg>',
+    },
 };
 let loadedPdf = null;
 let pdfObjectUrl = null;
@@ -64,6 +86,25 @@ let resizeTimer = null;
 let selectedField = null;
 let activeInteraction = null;
 let autoScrollFrame = null;
+let temporaryDocument = null;
+let recipient = { name: "José Ramírez", email: "jose.ramirez@empresa.com" };
+
+try {
+    recipient = { ...recipient, ...(JSON.parse(localStorage.getItem("adicla-sign-recipient")) || {}) };
+} catch (error) {
+    console.warn("No se pudo leer el destinatario temporal.", error);
+}
+
+function recipientInitials(name) {
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "D";
+}
+
+function updateRecipientPresentation() {
+    if (recipientNameElement) recipientNameElement.textContent = recipient.name;
+    if (recipientEmailElement) recipientEmailElement.textContent = recipient.email;
+    if (recipientInitialsElement) recipientInitialsElement.textContent = recipientInitials(recipient.name);
+    if (propertyRecipient) propertyRecipient.textContent = recipient.name;
+}
 
 function clamp(value, minimum, maximum) {
     return Math.min(Math.max(value, minimum), maximum);
@@ -96,6 +137,7 @@ function getNormalizedFieldData(fieldElement) {
         width: roundNormalized(Math.min(width, 1 - x)),
         height: roundNormalized(Math.min(height, 1 - y)),
         required: existingField?.required ?? fieldElement.dataset.required !== "false",
+        recipient: recipient.name,
     };
 
     if (normalizedField.type === "text") {
@@ -170,7 +212,7 @@ function updateFieldPresentation(fieldElement, fieldData) {
     if (fieldData.type === "text") fieldElement.dataset.label = fieldData.label;
     fieldElement.querySelector(".document-field__label strong").textContent = visibleLabel;
     fieldElement.querySelector(".document-field__label small").textContent =
-        `${config.description} · ${fieldData.required ? "Obligatorio" : "Opcional"}`;
+        `${fieldData.recipient || recipient.name} · ${fieldData.required ? "Obligatorio" : "Opcional"}`;
     fieldElement.setAttribute("aria-label", `${visibleLabel} en página ${fieldData.page}`);
 }
 
@@ -223,6 +265,7 @@ function createDocumentField(type, layer, clientX, clientY) {
         width: 0,
         height: 0,
         required: true,
+        recipient: recipient.name,
     };
     if (type === "text") fieldData.label = config.defaultLabel;
     const fieldElement = createFieldElement(fieldData, layer);
@@ -480,7 +523,7 @@ function showState(message, type = "loading") {
     viewerState.hidden = false;
 }
 
-function takeTemporaryPdf() {
+function readTemporaryDocument() {
     return new Promise((resolve, reject) => {
         const openRequest = indexedDB.open(databaseName, 1);
 
@@ -492,14 +535,13 @@ function takeTemporaryPdf() {
         openRequest.addEventListener("error", () => reject(openRequest.error));
         openRequest.addEventListener("success", () => {
             const database = openRequest.result;
-            const transaction = database.transaction(storeName, "readwrite");
+            const transaction = database.transaction(storeName, "readonly");
             const store = transaction.objectStore(storeName);
             const getRequest = store.get(documentKey);
             let storedDocument = null;
 
             getRequest.addEventListener("success", () => {
                 storedDocument = getRequest.result;
-                if (storedDocument) store.delete(documentKey);
             });
             transaction.addEventListener("complete", () => {
                 database.close();
@@ -513,6 +555,25 @@ function takeTemporaryPdf() {
                 database.close();
                 reject(transaction.error);
             });
+        });
+    });
+}
+
+function storeDocumentForReview() {
+    return new Promise((resolve, reject) => {
+        const openRequest = indexedDB.open(databaseName, 1);
+        openRequest.addEventListener("error", () => reject(openRequest.error));
+        openRequest.addEventListener("success", () => {
+            const database = openRequest.result;
+            const transaction = database.transaction(storeName, "readwrite");
+            transaction.objectStore(storeName).put({
+                ...temporaryDocument,
+                recipient,
+                fields: documentFields.map((field) => ({ ...field })),
+            }, documentKey);
+            transaction.addEventListener("complete", () => { database.close(); resolve(); });
+            transaction.addEventListener("error", () => { database.close(); reject(transaction.error); });
+            transaction.addEventListener("abort", () => { database.close(); reject(transaction.error); });
         });
     });
 }
@@ -579,15 +640,21 @@ async function prepareEditor() {
     showState("Preparando documento...");
 
     try {
-        const storedDocument = await takeTemporaryPdf();
-        if (!storedDocument?.file) {
+        temporaryDocument = await readTemporaryDocument();
+        if (!temporaryDocument?.file) {
             documentStatus.textContent = "Sin documento";
             showState("No hay un documento seleccionado.", "empty");
             return;
         }
 
-        documentName.textContent = storedDocument.name || storedDocument.file.name || "Documento PDF";
-        pdfObjectUrl = URL.createObjectURL(storedDocument.file);
+        if (temporaryDocument.recipient) recipient = { ...recipient, ...temporaryDocument.recipient };
+        updateRecipientPresentation();
+        const restoredFields = Array.isArray(temporaryDocument.fields)
+            ? temporaryDocument.fields.filter((field) => FIELD_TYPES[field.type] && Number.isFinite(field.page))
+            : [];
+        documentFields.splice(0, documentFields.length, ...restoredFields.map((field) => ({ ...field, recipient: field.recipient || recipient.name })));
+        documentName.textContent = temporaryDocument.name || temporaryDocument.file.name || "Documento PDF";
+        pdfObjectUrl = URL.createObjectURL(temporaryDocument.file);
         window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
         loadedPdf = await window.pdfjsLib.getDocument(pdfObjectUrl).promise;
@@ -616,7 +683,16 @@ function scheduleResize() {
     }, 180);
 }
 
-fieldTools.forEach((tool) => tool.addEventListener("pointerdown", startToolDrag));
+fieldTools.forEach((tool) => {
+    tool.addEventListener("pointerdown", startToolDrag);
+    tool.addEventListener("click", (event) => {
+        if (event.detail !== 0 || tool.disabled || !loadedPdf) return;
+        const layer = document.querySelector('.field-layer[data-page="1"]');
+        if (!layer) return;
+        const rect = layer.getBoundingClientRect();
+        createDocumentField(tool.dataset.fieldType, layer, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+});
 document.addEventListener("pointermove", handlePointerMove);
 document.addEventListener("pointerup", finishInteraction);
 document.addEventListener("pointercancel", finishInteraction);
@@ -643,16 +719,24 @@ propertyLabel?.addEventListener("blur", () => {
     normalizeTextLabel(selectedField);
 });
 propertyDelete?.addEventListener("click", () => removeField(selectedField));
-continueButton?.addEventListener("click", () => {
+continueButton?.addEventListener("click", async () => {
     if (documentFields.length === 0) {
         showEditorFeedback("Agrega al menos un campo al documento para continuar.");
         return;
     }
 
     hideEditorFeedback();
-    const normalizedFields = documentFields.map((field) => ({ ...field }));
-    console.log("Campos normalizados:", normalizedFields);
-    console.table(normalizedFields);
+    continueButton.disabled = true;
+    continueButton.textContent = "Preparando...";
+    try {
+        await storeDocumentForReview();
+        window.location.assign(continueButton.dataset.reviewUrl);
+    } catch (error) {
+        console.error("No se pudo preparar la revisión.", error);
+        showEditorFeedback("No se pudo preparar la revisión. Inténtalo nuevamente.");
+        continueButton.disabled = false;
+        continueButton.textContent = "Continuar";
+    }
 });
 
 if (viewer && "ResizeObserver" in window) {
@@ -670,5 +754,6 @@ if (!window.indexedDB || !window.pdfjsLib) {
     documentStatus.textContent = "Error al preparar";
     showState("No se pudo cargar el documento.", "error");
 } else {
+    updateRecipientPresentation();
     prepareEditor();
 }

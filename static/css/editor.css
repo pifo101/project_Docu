@@ -163,6 +163,60 @@
     margin-top: 23px;
 }
 
+.editor-recipient {
+    margin-top: 18px;
+    padding: 13px;
+    border: 1px solid #b8c6e8;
+    border-radius: 11px;
+    background: #f8faff;
+}
+
+.editor-recipient > span {
+    color: var(--color-primary);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .9px;
+    text-transform: uppercase;
+}
+
+.editor-recipient > div {
+    display: flex;
+    margin-top: 9px;
+    align-items: center;
+    gap: 9px;
+}
+
+.editor-recipient i {
+    display: grid;
+    width: 31px;
+    height: 31px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 9px;
+    color: var(--color-dark-blue);
+    background: #dbe4ff;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.editor-recipient p {
+    display: grid;
+    min-width: 0;
+    margin: 0;
+    gap: 2px;
+}
+
+.editor-recipient strong,
+.editor-recipient small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.editor-recipient strong { font-size: 9px; }
+.editor-recipient small { color: #667085; font-size: 8px; }
+
 .field-tool {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -305,6 +359,17 @@
     background: var(--color-primary-soft);
     font-size: 9px;
 }
+
+.property-recipient {
+    display: grid;
+    gap: 4px;
+    padding: 9px;
+    border-radius: 8px;
+    background: #f7f8fa;
+}
+
+.property-recipient span { color: #98a2b3; font-size: 8px; text-transform: uppercase; }
+.property-recipient strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 
 .property-switch {
     display: grid;
@@ -652,6 +717,18 @@
     background: rgba(247, 248, 250, 0.97);
 }
 
+.document-field--initials,
+.field-drag-preview--initials {
+    border-color: #8b5cf6;
+    background: rgba(247, 243, 255, 0.97);
+}
+
+.document-field--checkbox,
+.field-drag-preview--checkbox {
+    border-color: #12b76a;
+    background: rgba(236, 253, 243, 0.97);
+}
+
 .document-field__label,
 .field-drag-preview__label {
     display: grid;
@@ -827,7 +904,7 @@
     }
 
     .field-list {
-        grid-template-columns: repeat(4, minmax(68px, 1fr));
+        grid-template-columns: repeat(3, minmax(68px, 1fr));
         margin-top: 0;
         overflow-x: auto;
     }
@@ -836,6 +913,8 @@
         margin-top: 16px;
         padding-top: 14px;
     }
+
+    .editor-recipient { margin-top: 12px; }
 
     .field-properties__content {
         grid-template-columns: auto minmax(150px, 1fr) auto;

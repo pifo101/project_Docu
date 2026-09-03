@@ -118,9 +118,39 @@ function storePdfForEditor(file) {
     });
 }
 
-document.querySelector("[data-upload-open]")?.addEventListener("click", () => {
-    resetUpload();
-    uploadDialog?.showModal();
+document.querySelectorAll("[data-upload-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+        resetUpload();
+        uploadDialog?.showModal();
+    });
+});
+
+const notificationToggle = document.querySelector("[data-notifications-toggle]");
+const notificationPanel = document.querySelector("[data-notifications-panel]");
+
+function setNotifications(open) {
+    if (!notificationToggle || !notificationPanel) return;
+    notificationToggle.setAttribute("aria-expanded", String(open));
+    notificationPanel.hidden = !open;
+}
+
+notificationToggle?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setNotifications(notificationToggle.getAttribute("aria-expanded") !== "true");
+});
+notificationPanel?.addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", () => setNotifications(false));
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && notificationToggle?.getAttribute("aria-expanded") === "true") {
+        setNotifications(false);
+        notificationToggle.focus();
+    }
+});
+document.querySelector("[data-mark-read]")?.addEventListener("click", () => {
+    document.querySelectorAll(".notification-item--unread").forEach((item) => item.classList.remove("notification-item--unread"));
+    const notificationCount = document.querySelector(".notification-count");
+    if (notificationCount) notificationCount.textContent = "0";
+    notificationToggle?.setAttribute("aria-label", "Notificaciones, ninguna sin leer");
 });
 
 document.querySelectorAll("[data-upload-close]").forEach((button) => {

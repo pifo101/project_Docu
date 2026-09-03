@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Solicitud de firma | ADICLA Sign{% endblock %}{% block body_class %}recipient-page request-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/recipient.css' %}">{% endblock %}
+{% block content %}
+<div class="recipient-shell">
+    <header class="recipient-header"><a class="brand" href="{% url 'firmas:request' %}" aria-label="ADICLA Sign"><span class="brand__mark"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span><span>ADICLA <strong>Sign</strong></span></a><span class="secure-note"><i aria-hidden="true">✓</i> Acceso seguro</span></header>
+    <main class="request-content">
+        <section class="request-card" aria-labelledby="request-title"><span class="request-card__eyebrow">Solicitud de firma</span><div class="request-avatar">AM</div><h1 id="request-title">Andrea Morales te ha solicitado revisar y firmar este documento.</h1><p>Revisa el contenido y completa los campos indicados para continuar.</p><div class="request-document"><span>PDF</span><div><strong>Contrato de servicios 2026</strong><small>Enviado el 3 sep 2026 · Vence el 10 sep 2026</small></div></div><a class="recipient-primary" href="{% url 'firmas:sign' %}">Revisar documento <span aria-hidden="true">→</span></a><small class="request-help">No necesitas crear una cuenta para completar esta solicitud.</small></section>
+    </main>
+    <footer class="recipient-footer">ADICLA Sign · Experiencia de firma electrónica</footer>
+</div>
+{% endblock %}

@@ -33,3 +33,4 @@ class AuthPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Mi perfil")
         self.assertContains(response, "Información personal")
+        self.assertContains(response, "Preferencias")

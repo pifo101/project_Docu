@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Agregar destinatarios | ADICLA Sign{% endblock %}{% block body_class %}workflow-page preparation-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/workflow.css' %}">{% endblock %}
+{% block content %}
+<div class="preparation-shell">
+    <header class="preparation-header"><a class="brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign"><span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span><span>ADICLA <strong>Sign</strong></span></a><span>Preparar documento</span></header>
+    <nav class="workflow-steps" aria-label="Progreso"><span class="workflow-step workflow-step--complete"><i>✓</i>Documento</span><span class="workflow-step workflow-step--active" aria-current="step"><i>2</i>Destinatario</span><span class="workflow-step"><i>3</i>Campos</span><span class="workflow-step"><i>4</i>Revisar</span></nav>
+    <main class="preparation-content">
+        <section class="preparation-heading"><span class="section-eyebrow">Paso 2 de 4</span><h1>Agregar destinatarios</h1><p>Indica quién necesita revisar y firmar el documento.</p></section>
+        <div class="preparation-grid">
+            <aside class="selected-document-card"><span class="document-icon document-icon--pdf">PDF</span><div><small>Documento seleccionado</small><strong data-workflow-document-name>Contrato de servicios 2026.pdf</strong><span>PDF · Listo para preparar</span></div><i aria-hidden="true">✓</i></aside>
+            <form class="recipient-form workflow-card" data-recipient-form novalidate>
+                <div class="recipient-form__heading"><span class="avatar">1</span><div><h2>Destinatario 1</h2><p>Esta persona recibirá la solicitud.</p></div><span class="action-badge">Necesita firmar</span></div>
+                <div class="form-grid"><label>Nombre completo<input name="recipient_name" autocomplete="name" required placeholder="Ej. José Ramírez" data-recipient-name><small>Ingresa el nombre del destinatario.</small></label><label>Correo electrónico<input name="recipient_email" type="email" autocomplete="email" required placeholder="nombre@empresa.com" data-recipient-email><small>Enviaremos la solicitud a este correo.</small></label></div>
+                <fieldset class="action-type"><legend>Tipo de acción</legend><label><input type="radio" name="action" value="sign" checked><span><i aria-hidden="true">✓</i><strong>Necesita firmar</strong><small>Debe completar los campos y firmar.</small></span></label></fieldset>
+                <button class="add-recipient-button" type="button" data-mock-action="La firma múltiple estará disponible próximamente"><span aria-hidden="true">+</span> Agregar destinatario</button>
+                <p class="form-error" role="alert" aria-live="polite" data-recipient-error></p>
+                <div class="preparation-actions"><a class="outline-action" href="{% url 'documentos:list' %}">Cancelar</a><button class="primary-action" type="submit" data-editor-url="{% url 'documentos:editor' %}">Siguiente <span aria-hidden="true">→</span></button></div>
+            </form>
+        </div>
+    </main>
+</div>
+{% endblock %}{% block extra_js %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}

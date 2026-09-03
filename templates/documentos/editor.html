@@ -8,7 +8,7 @@
 {% block content %}
 <div class="editor-shell">
     <header class="editor-header">
-        <a class="editor-back" href="{% url 'usuarios:dashboard' %}">
+        <a class="editor-back" href="{% url 'documentos:recipients' %}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
             <span>Volver</span>
         </a>
@@ -19,16 +19,20 @@
                 <strong data-document-name>Documento PDF</strong>
             </div>
         </div>
-        <button class="editor-continue" type="button" data-editor-continue disabled>Continuar</button>
+        <button class="editor-continue" type="button" data-editor-continue data-review-url="{% url 'documentos:review' %}" disabled>Continuar</button>
     </header>
 
     <main class="editor-workspace">
         <aside class="field-panel" aria-labelledby="fields-title">
             <div class="field-panel__heading">
-                <span>Paso 1</span>
+                <span>Paso 3</span>
                 <h1 id="fields-title">Campos</h1>
                 <p>Arrastra los campos y colócalos sobre el documento.</p>
             </div>
+            <section class="editor-recipient" aria-label="Destinatario asignado">
+                <span>Destinatario</span>
+                <div><i data-recipient-initials>JR</i><p><strong data-recipient-name>José Ramírez</strong><small data-recipient-email>jose.ramirez@empresa.com</small></p></div>
+            </section>
             <div class="field-list" aria-label="Campos del documento">
                 <button class="field-tool field-tool--active" type="button" data-field-type="signature" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg></span>
@@ -50,6 +54,16 @@
                     Texto
                     <small>Arrastrar</small>
                 </button>
+                <button class="field-tool field-tool--active" type="button" data-field-type="initials" disabled>
+                    <span class="field-tool__letter" aria-hidden="true">AB</span>
+                    Iniciales
+                    <small>Arrastrar</small>
+                </button>
+                <button class="field-tool field-tool--active" type="button" data-field-type="checkbox" disabled>
+                    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 12l3 3 5-6"/></svg></span>
+                    Checkbox
+                    <small>Arrastrar</small>
+                </button>
             </div>
 
             <section class="field-properties" aria-labelledby="properties-title">
@@ -60,6 +74,7 @@
                         <span>Tipo</span>
                         <strong data-property-type></strong>
                     </div>
+                    <div class="property-recipient"><span>Destinatario</span><strong data-property-recipient>José Ramírez</strong></div>
                     <label class="property-switch">
                         <input type="checkbox" data-property-required>
                         <span aria-hidden="true"></span>
