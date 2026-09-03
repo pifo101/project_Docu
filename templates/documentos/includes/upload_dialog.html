@@ -1,0 +1,52 @@
+<dialog class="upload-dialog" aria-labelledby="upload-title" aria-describedby="upload-description">
+    <div class="upload-dialog__header">
+        <div class="upload-dialog__heading">
+            <span class="upload-dialog__step">Nuevo documento</span>
+            <h2 id="upload-title">Sube el PDF que deseas firmar</h2>
+            <p id="upload-description">Agrega un documento para comenzar a preparar las firmas.</p>
+        </div>
+        <button class="upload-dialog__close" type="button" aria-label="Cerrar carga de documento" data-upload-close>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+    </div>
+
+    <form class="upload-form" novalidate>
+        <input class="upload-input" id="pdf-file" name="document" type="file" accept="application/pdf,.pdf" aria-describedby="upload-rules upload-error">
+        <label class="drop-zone" for="pdf-file" tabindex="0">
+            <span class="drop-zone__art" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h4M12 17V11M9.5 13.5L12 11l2.5 2.5"/></svg>
+                <i></i><i></i>
+            </span>
+            <span class="drop-zone__copy">
+                <strong>Arrastra tu documento aquí</strong>
+                <span>o <em>selecciona un archivo</em> desde tu equipo</span>
+            </span>
+            <small id="upload-rules">Solo PDF · Máximo 20 MB</small>
+        </label>
+
+        <p class="upload-error" id="upload-error" role="alert" aria-live="polite"></p>
+
+        <div class="selected-file" aria-live="polite" hidden>
+            <span class="selected-file__icon" aria-hidden="true">PDF</span>
+            <span class="selected-file__info">
+                <strong></strong>
+                <small></small>
+            </span>
+            <span class="selected-file__status">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                Listo
+            </span>
+            <button class="selected-file__remove" type="button" aria-label="Quitar archivo">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
+            </button>
+        </div>
+
+        <div class="upload-dialog__footer">
+            <span><i aria-hidden="true"></i> Tu archivo se procesará de forma segura</span>
+            <div>
+                <button class="upload-cancel" type="button" data-upload-close>Cancelar</button>
+                <button class="upload-continue" type="button" data-editor-url="{% url 'documentos:recipients' %}" disabled>Continuar</button>
+            </div>
+        </div>
+    </form>
+</dialog>

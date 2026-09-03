@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Contrato de servicios 2026 | ADICLA Sign{% endblock %}
+{% block body_class %}dashboard-page workflow-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/documents.css' %}"><link rel="stylesheet" href="{% static 'css/workflow.css' %}">{% endblock %}
+{% block content %}
+<div class="dashboard-shell">
+    {% include "documentos/includes/app_sidebar.html" with active_section="documents" %}
+    <div class="dashboard-main">
+        <header class="dashboard-header"><button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="dashboard-header__title"><span class="mobile-logo">ADICLA <strong>Sign</strong></span><p>Detalle y seguimiento</p></div><div class="dashboard-header__actions">{% include "documentos/includes/notifications.html" %}<a class="new-document-button" href="{% url 'documentos:list' %}">Volver</a></div></header>
+        <main class="dashboard-content workflow-content">
+            <nav class="breadcrumb" aria-label="Migas de pan"><a href="{% url 'documentos:list' %}">Mis documentos</a><span aria-hidden="true">/</span><span>Contrato de servicios 2026</span></nav>
+            <section class="detail-hero">
+                <div class="detail-hero__identity"><span class="document-icon document-icon--pdf">PDF</span><div><span class="section-eyebrow">Documento</span><h1>Contrato de servicios 2026</h1><p>Solicitud preparada por Andrea Morales</p></div></div>
+                <span class="status status--pending"><i></i>Pendiente</span>
+            </section>
+            <div class="detail-actions" aria-label="Acciones del documento"><button class="primary-action" type="button" data-mock-action="Vista del documento preparada">Ver documento</button><button class="outline-action" type="button" data-mock-action="Descarga simulada">Descargar</button><a class="outline-action" href="{% url 'documentos:recipients' %}">Continuar edición</a><button class="outline-action" type="button" data-mock-action="Recordatorio enviado (simulación)">Enviar recordatorio</button><a class="outline-action" href="#activity">Ver historial</a></div>
+            <p class="workflow-alert" role="status" aria-live="polite" data-workflow-feedback hidden></p>
+            <div class="detail-layout">
+                <div class="detail-main">
+                    <section class="workflow-card"><div class="workflow-card__header"><div><span class="panel__overline">Información</span><h2>Detalles del documento</h2></div></div><dl class="metadata-grid"><div><dt>Propietaria</dt><dd>Andrea Morales</dd></div><div><dt>Creado</dt><dd>2 sep 2026 · 10:34</dd></div><div><dt>Enviado</dt><dd>3 sep 2026 · 08:15</dd></div><div><dt>Vencimiento</dt><dd>10 sep 2026</dd></div></dl></section>
+                    <section class="workflow-card"><div class="workflow-card__header"><div><span class="panel__overline">Participantes</span><h2>Destinatarios</h2></div><span class="participant-summary">1 de 2 completó</span></div><div class="recipient-status-list"><article><span class="avatar avatar--owner">AM</span><div><strong>Andrea Morales</strong><small>andrea.morales@adicla.com · Propietaria</small></div><span class="status status--complete"><i></i>Preparado</span></article><article><span class="avatar">JR</span><div><strong>José Ramírez</strong><small>jose.ramirez@empresa.com · Necesita firmar</small></div><span class="status status--viewed"><i></i>Visto</span></article></div></section>
+                </div>
+                <aside class="workflow-card activity-card" id="activity"><div class="workflow-card__header"><div><span class="panel__overline">Seguimiento</span><h2>Actividad</h2></div></div><ol class="activity-timeline"><li class="activity-timeline__complete"><span></span><div><strong>Documento creado</strong><time>2 sep 2026 · 10:34</time></div></li><li class="activity-timeline__complete"><span></span><div><strong>Documento enviado</strong><time>3 sep 2026 · 08:15</time></div></li><li class="activity-timeline__complete"><span></span><div><strong>Documento visualizado</strong><time>3 sep 2026 · 09:42</time></div></li><li class="activity-timeline__current"><span></span><div><strong>Esperando firma</strong><time>Estado actual</time></div></li></ol></aside>
+            </div>
+        </main>
+    </div>
+</div><button class="sidebar-backdrop" type="button" aria-label="Cerrar navegación" tabindex="-1"></button>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'js/dashboard.js' %}" defer></script><script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}

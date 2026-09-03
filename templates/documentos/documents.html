@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Mis documentos | ADICLA Sign{% endblock %}
+{% block body_class %}dashboard-page documents-page{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-shell">
+    <aside class="sidebar" id="dashboard-sidebar">
+        <div class="sidebar__top">
+            <a class="brand sidebar__brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign, panel principal">
+                <span class="brand__mark" aria-hidden="true">
+                    <svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg>
+                </span>
+                <span>ADICLA <strong>Sign</strong></span>
+            </a>
+
+            <nav class="sidebar__nav" aria-label="Navegación principal">
+                <a class="nav-link" href="{% url 'usuarios:dashboard' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+                    Resumen
+                </a>
+                <a class="nav-link nav-link--active" href="{% url 'documentos:list' %}" aria-current="page">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg>
+                    Documentos
+                    <span class="nav-link__count">8</span>
+                </a>
+                <a class="nav-link" href="{% url 'documentos:pending' %}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2"/></svg>
+                    Pendientes
+                    <span class="nav-link__count nav-link__count--accent">3</span>
+                </a>
+                <a class="nav-link" href="{% url 'documentos:detail' %}#activity">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+                    Actividad
+                </a>
+            </nav>
+        </div>
+
+        <div class="sidebar__bottom">
+            <div class="storage-card">
+                <div class="storage-card__heading"><span>Almacenamiento</span><strong>36%</strong></div>
+                <div class="storage-card__bar"><span></span></div>
+                <p>1.8 GB de 5 GB utilizados</p>
+            </div>
+            <a class="profile-chip" href="{% url 'usuarios:profile' %}">
+                <span class="profile-chip__avatar">AM</span>
+                <span class="profile-chip__copy"><strong>Andrea Morales</strong><small>Administradora</small></span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </a>
+        </div>
+    </aside>
+
+    <div class="dashboard-main">
+        <header class="dashboard-header">
+            <button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+            <div class="dashboard-header__title">
+                <span class="mobile-logo">ADICLA <strong>Sign</strong></span>
+                <p>Gestiona y consulta tus solicitudes</p>
+            </div>
+            <div class="dashboard-header__actions">
+                {% include "documentos/includes/notifications.html" %}
+                <button class="new-document-button" type="button" data-upload-open>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Nuevo documento
+                </button>
+            </div>
+        </header>
+
+        <main class="dashboard-content documents-content">
+            <section class="documents-heading" aria-labelledby="documents-page-title">
+                <div>
+                    <span class="section-eyebrow">Documentos</span>
+                    <h1 id="documents-page-title">Mis documentos</h1>
+                    <p>Consulta el estado de cada solicitud y encuentra rápidamente lo que necesitas.</p>
+                </div>
+                <button class="new-document-button documents-heading__button" type="button" data-upload-open>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Nuevo documento
+                </button>
+            </section>
+
+            <section class="documents-panel" aria-label="Listado de documentos" data-detail-url="{% url 'documentos:detail' %}" data-edit-url="{% url 'documentos:recipients' %}">
+                <div class="documents-toolbar">
+                    <div class="document-search">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg>
+                        <label class="visually-hidden" for="document-search">Buscar documentos</label>
+                        <input id="document-search" type="search" placeholder="Buscar por documento o participante" autocomplete="off" data-document-search>
+                        <kbd aria-hidden="true">Ctrl K</kbd>
+                    </div>
+                    <p class="documents-count" aria-live="polite" data-document-count>8 documentos</p>
+                </div>
+
+                <div class="document-filters" role="tablist" aria-label="Filtrar documentos">
+                    <button class="document-filter document-filter--active" type="button" role="tab" aria-selected="true" data-filter="all">Todos <span>8</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="draft">Borradores <span>2</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="sent">Enviados <span>1</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="pending">Pendientes <span>2</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="signed">Firmados <span>1</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="rejected">Rechazados <span>1</span></button>
+                    <button class="document-filter" type="button" role="tab" aria-selected="false" data-filter="expired">Expirados <span>1</span></button>
+                </div>
+
+                <div class="documents-table" data-document-list>
+                    <div class="documents-table__header" aria-hidden="true">
+                        <span>Documento</span><span>Participantes</span><span>Fecha</span><span>Estado</span><span></span>
+                    </div>
+
+                    <article class="document-entry" data-document data-status="pending" data-search="contrato de servicios 2026 jose ramirez">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Contrato de servicios 2026</strong><small>2 participantes · 1 pendiente</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>JR</span></div><span><strong>José Ramírez</strong><small>jose.ramirez@empresa.com</small></span></div>
+                        <time datetime="2026-09-03"><strong>3 sep 2026</strong><small>Actualizado 09:42</small></time>
+                        <span class="status status--pending"><i></i>Pendiente</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Contrato de servicios 2026" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Enviar recordatorio</button><button type="button" role="menuitem">Descargar</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="signed" data-search="convenio de confidencialidad lucia castillo mario perez">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Convenio de confidencialidad</strong><small>3 participantes · Completado</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>LC</span><span>+1</span></div><span><strong>Lucía Castillo y 1 más</strong><small>Todos completaron</small></span></div>
+                        <time datetime="2026-09-02"><strong>2 sep 2026</strong><small>Completado 16:42</small></time>
+                        <span class="status status--complete"><i></i>Firmado</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Convenio de confidencialidad" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Descargar</button><button type="button" role="menuitem">Ver historial</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="draft" data-search="propuesta comercial norte sin destinatario">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Propuesta comercial - Norte</strong><small>Sin destinatario</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span></div><span><strong>Sin destinatario</strong><small>Preparación incompleta</small></span></div>
+                        <time datetime="2026-08-31"><strong>31 ago 2026</strong><small>Actualizado 09:15</small></time>
+                        <span class="status status--draft"><i></i>Borrador</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Propuesta comercial Norte" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Continuar edición</button><button type="button" role="menuitem">Cambiar nombre</button><button class="menu-action--danger" type="button" role="menuitem">Eliminar</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="sent" data-search="acuerdo de colaboracion maria fernanda lopez">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Acuerdo de colaboración</strong><small>1 destinatario</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>ML</span></div><span><strong>María Fernanda López</strong><small>maria.lopez@asociacion.org</small></span></div>
+                        <time datetime="2026-08-29"><strong>29 ago 2026</strong><small>Enviado 14:08</small></time>
+                        <span class="status status--sent"><i></i>Enviado</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Acuerdo de colaboración" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Descargar</button><button type="button" role="menuitem">Ver historial</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="pending" data-search="autorizacion de presupuesto carlos mendez">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Autorización de presupuesto</strong><small>1 destinatario · Visualizado</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>CM</span></div><span><strong>Carlos Méndez</strong><small>carlos.mendez@adicla.org</small></span></div>
+                        <time datetime="2026-08-28"><strong>28 ago 2026</strong><small>Visto 10:22</small></time>
+                        <span class="status status--viewed"><i></i>Visto</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Autorización de presupuesto" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Enviar recordatorio</button><button type="button" role="menuitem">Descargar</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="rejected" data-search="carta de aceptacion sofia herrera">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Carta de aceptación</strong><small>1 destinatario · Finalizado</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>SH</span></div><span><strong>Sofía Herrera</strong><small>sofia.herrera@ejemplo.com</small></span></div>
+                        <time datetime="2026-08-25"><strong>25 ago 2026</strong><small>Rechazado 11:30</small></time>
+                        <span class="status status--rejected"><i></i>Rechazado</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Carta de aceptación" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Ver motivo</button><button type="button" role="menuitem">Descargar</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="expired" data-search="orden de compra 1842 daniel ortiz">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Orden de compra #1842</strong><small>1 destinatario · Finalizado</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span><span>DO</span></div><span><strong>Daniel Ortiz</strong><small>daniel.ortiz@proveedor.com</small></span></div>
+                        <time datetime="2026-08-20"><strong>20 ago 2026</strong><small>Expiró 30 ago</small></time>
+                        <span class="status status--expired"><i></i>Expirado</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Orden de compra 1842" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Ver detalle</button><button type="button" role="menuitem">Duplicar</button><button type="button" role="menuitem">Descargar</button></div></div>
+                    </article>
+
+                    <article class="document-entry" data-document data-status="draft" data-search="constancia de entrega sin destinatario">
+                        <div class="document-entry__primary"><span class="document-icon document-icon--pdf">PDF</span><span class="document-entry__name"><strong>Constancia de entrega</strong><small>Sin destinatario</small></span></div>
+                        <div class="document-entry__participants"><div class="signers" aria-hidden="true"><span>AM</span></div><span><strong>Sin destinatario</strong><small>Creado por ti</small></span></div>
+                        <time datetime="2026-08-18"><strong>18 ago 2026</strong><small>Actualizado 15:06</small></time>
+                        <span class="status status--draft"><i></i>Borrador</span>
+                        <div class="document-actions"><button class="more-button" type="button" aria-label="Acciones de Constancia de entrega" aria-haspopup="menu" aria-expanded="false" data-actions-toggle>•••</button><div class="document-actions__menu" role="menu" hidden><button type="button" role="menuitem">Continuar edición</button><button type="button" role="menuitem">Cambiar nombre</button><button class="menu-action--danger" type="button" role="menuitem">Eliminar</button></div></div>
+                    </article>
+                </div>
+
+                <div class="documents-empty" data-empty-state hidden>
+                    <span class="documents-empty__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 14h6"/></svg></span>
+                    <h2 data-empty-title>No hay documentos aquí</h2>
+                    <p data-empty-copy>Cuando tengas documentos en este estado, aparecerán en esta sección.</p>
+                    <button class="new-document-button" type="button" data-upload-open>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        Nuevo documento
+                    </button>
+                </div>
+            </section>
+            <p class="documents-feedback" role="status" aria-live="polite" data-documents-feedback hidden></p>
+        </main>
+    </div>
+</div>
+<button class="sidebar-backdrop" type="button" aria-label="Cerrar navegación" tabindex="-1"></button>
+{% include "documentos/includes/upload_dialog.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/dashboard.js' %}" defer></script>
+<script src="{% static 'js/documents.js' %}" defer></script>
+{% endblock %}

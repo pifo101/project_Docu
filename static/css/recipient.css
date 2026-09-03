@@ -1,0 +1,105 @@
+.recipient-page { min-height: 100vh; background: #f4f6fb; }
+.recipient-page button, .recipient-page textarea { font: inherit; }
+.recipient-shell { display: grid; min-height: 100vh; grid-template-rows: auto 1fr auto; }
+.recipient-header { display: flex; min-height: 70px; padding: 0 clamp(20px, 5vw, 70px); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); background: white; }
+.recipient-header .brand, .signing-header .brand { color: var(--color-primary); }
+.recipient-header .brand strong, .signing-header .brand strong { color: #b89700; }
+.secure-note { display: flex; align-items: center; gap: 7px; color: #667085; font-size: 10px; font-weight: 600; }
+.secure-note i { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: #027a48; background: #ecfdf3; font-style: normal; }
+.request-content, .completed-content { display: grid; padding: 54px 20px; place-items: center; }
+.request-card, .completed-card { width: min(590px, 100%); padding: clamp(28px, 6vw, 54px); border: 1px solid var(--color-border); border-radius: 24px; background: white; box-shadow: 0 20px 55px rgba(16,24,40,.08); text-align: center; }
+.request-card__eyebrow, .section-label { color: var(--color-primary); font-size: 9px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; }
+.request-avatar { display: grid; width: 58px; height: 58px; margin: 20px auto; place-items: center; border-radius: 17px; color: var(--color-dark-blue); background: var(--color-accent); font-weight: 800; }
+.request-card h1, .completed-card h1 { margin: 0 auto 12px; font-family: "Manrope", Arial, sans-serif; font-size: clamp(23px, 5vw, 31px); line-height: 1.25; letter-spacing: -1px; }
+.request-card > p, .completed-card > p { margin: 0; color: #667085; font-size: 12px; line-height: 1.6; }
+.request-document, .completed-document { display: grid; grid-template-columns: auto minmax(0,1fr) auto; margin: 26px 0 20px; padding: 16px; align-items: center; gap: 12px; border: 1px solid var(--color-border); border-radius: 13px; background: #fcfcfd; text-align: left; }
+.request-document > span, .document-preview { display: grid; width: 42px; height: 49px; place-items: center; border-radius: 8px; color: #b42318; background: #fff1ef; font-size: 8px; font-weight: 800; }
+.request-document div, .completed-document div { display: grid; min-width: 0; gap: 4px; }
+.request-document strong, .completed-document strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.request-document small, .completed-document small { color: #98a2b3; font-size: 9px; }
+.recipient-primary, .recipient-secondary, .reject-action { display: inline-flex; min-height: 43px; padding: 0 17px; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.recipient-primary { border: 1px solid var(--color-primary); color: white; background: var(--color-primary); box-shadow: 0 8px 18px rgba(14,67,240,.16); }
+.recipient-primary:hover { color: white; background: var(--color-primary-hover); text-decoration: none; }
+.recipient-primary:disabled { border-color: #d0d5dd; color: #98a2b3; background: #eaecf0; box-shadow: none; cursor: not-allowed; }
+.recipient-secondary { border: 1px solid #d0d5dd; color: #344054; background: white; }
+.request-card > .recipient-primary { display: flex; width: 100%; }
+.request-help, .close-message { display: block; margin-top: 14px; color: #98a2b3; font-size: 9px; }
+.recipient-footer { padding: 18px; color: #98a2b3; font-size: 9px; text-align: center; }
+.signing-shell { display: grid; min-height: 100vh; grid-template-rows: 70px minmax(0,1fr) 70px; }
+.signing-header { position: sticky; z-index: 15; top: 0; display: grid; grid-template-columns: 220px minmax(0,1fr) 180px; padding: 0 24px; align-items: center; gap: 20px; border-bottom: 1px solid var(--color-border); background: white; }
+.signing-document { display: grid; min-width: 0; justify-self: center; gap: 3px; text-align: center; }
+.signing-document strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.signing-document small { color: #98a2b3; font-size: 8px; }
+.signing-progress { display: grid; gap: 6px; }
+.signing-progress > span { color: #667085; font-size: 9px; text-align: right; }
+.signing-progress > span strong { color: var(--color-text); }
+.signing-progress > div { height: 5px; overflow: hidden; border-radius: 99px; background: #eaecf0; }
+.signing-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--color-primary); transition: width 180ms ease; }
+.signing-main { display: grid; min-height: 0; grid-template-columns: 240px minmax(0,1fr); }
+.signing-guide { position: sticky; top: 70px; height: calc(100vh - 140px); padding: 30px 22px; border-right: 1px solid var(--color-border); background: white; }
+.signing-guide h1 { margin: 7px 0; font-family: "Manrope", Arial, sans-serif; font-size: 20px; }
+.signing-guide > p { margin: 0; color: #667085; font-size: 10px; line-height: 1.55; }
+.signing-guide ol { display: grid; margin: 26px 0; padding: 0; gap: 8px; list-style: none; }
+.signing-guide li { display: flex; min-height: 38px; padding: 0 9px; align-items: center; gap: 9px; border-radius: 9px; color: #667085; font-size: 10px; }
+.signing-guide li i { display: grid; width: 23px; height: 23px; place-items: center; border: 1px solid #d0d5dd; border-radius: 50%; font-size: 8px; font-style: normal; }
+.signing-guide li.field-complete { color: #027a48; background: #ecfdf3; }
+.signing-guide li.field-complete i { border-color: #12b76a; color: white; background: #12b76a; font-size: 0; }
+.signing-guide li.field-complete i::after { content: "✓"; font-size: 9px; }
+.signing-guide .recipient-secondary { width: 100%; color: #b42318; }
+.recipient-viewer { min-width: 0; padding: 24px clamp(20px, 6vw, 80px) 48px; overflow: auto; background: #e9edf5; }
+.recipient-viewer__toolbar { display: flex; width: min(720px,100%); margin: 0 auto 12px; justify-content: space-between; color: #667085; font-size: 9px; }
+.recipient-document-page { position: relative; width: min(720px,100%); aspect-ratio: 1 / 1.294; margin: 0 auto; overflow: hidden; background: white; box-shadow: 0 16px 45px rgba(16,24,40,.15); }
+.recipient-document-page > canvas { display: block; width: 100%; height: 100%; }
+.recipient-field { position: absolute; display: grid; padding: 8px 10px; border: 2px solid var(--color-primary); border-radius: 7px; color: var(--color-dark-blue); background: rgba(239,244,255,.96); box-shadow: 0 5px 15px rgba(14,67,240,.18); text-align: left; cursor: pointer; }
+.recipient-field:hover, .recipient-field:focus-visible { outline: 3px solid rgba(14,67,240,.2); outline-offset: 2px; }
+.recipient-field small { color: #667085; font-size: 7px; font-weight: 700; text-transform: uppercase; }
+.recipient-field strong { font-size: 9px; }
+.recipient-field--name { width: 32%; left: 13%; top: 33%; }
+.recipient-field--date { width: 25%; right: 12%; top: 42%; }
+.recipient-field--checkbox { display: flex; width: 42%; left: 13%; top: 61%; align-items: center; gap: 7px; font-size: 8px; }
+.recipient-field--checkbox i { width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--color-primary); border-radius: 3px; background: white; }
+.recipient-field--signature { width: 38%; right: 12%; bottom: 16%; min-height: 62px; }
+.recipient-field.field-complete { border-color: #12b76a; background: rgba(236,253,243,.97); }
+.recipient-field--checkbox.field-complete i { display: grid; place-items: center; color: white; background: #12b76a; }
+.recipient-field--checkbox.field-complete i::after { content: "✓"; font-size: 9px; }
+.recipient-field--signature img { width: 100%; height: 38px; object-fit: contain; }
+.signing-footer { position: sticky; z-index: 10; bottom: 0; display: flex; padding: 0 28px; align-items: center; justify-content: flex-end; gap: 20px; border-top: 1px solid var(--color-border); background: white; }
+.signing-footer > span { color: #667085; font-size: 9px; }
+.signing-reject-mobile { display: inline-flex; margin-left: auto; color: #b42318; }
+.consent-panel { position: fixed; z-index: 20; width: min(520px,calc(100% - 28px)); right: 20px; bottom: 84px; padding: 22px; border: 1px solid #b7e4cb; border-radius: 16px; background: white; box-shadow: 0 20px 55px rgba(16,24,40,.2); }
+.consent-panel[hidden] { display: none; }
+.consent-panel > div { display: flex; align-items: center; gap: 11px; }
+.success-mini { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: white; background: #12b76a; }
+.consent-panel h2 { margin: 0 0 3px; font-family: "Manrope", Arial, sans-serif; font-size: 15px; }
+.consent-panel p { margin: 0; color: #667085; font-size: 9px; }
+.consent-panel label { display: flex; margin: 18px 0; align-items: flex-start; gap: 9px; color: #344054; font-size: 10px; line-height: 1.45; cursor: pointer; }
+.consent-panel input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--color-primary); }
+.consent-panel .recipient-primary { width: 100%; }
+.signature-dialog, .reject-dialog { width: min(600px,calc(100vw - 24px)); padding: 0; border: 0; border-radius: 20px; color: var(--color-text); box-shadow: 0 28px 80px rgba(8,20,52,.3); }
+.signature-dialog::backdrop, .reject-dialog::backdrop { background: rgba(8,20,52,.65); backdrop-filter: blur(4px); }
+.signature-dialog__header { display: flex; padding: 24px 26px 18px; justify-content: space-between; border-bottom: 1px solid var(--color-border); }
+.signature-dialog__header span { color: var(--color-primary); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.signature-dialog__header h2, .reject-dialog h2 { margin: 4px 0; font-family: "Manrope", Arial, sans-serif; font-size: 21px; }
+.signature-dialog__header p, .reject-dialog p { margin: 0; color: #667085; font-size: 10px; }
+.signature-dialog__header > button { width: 34px; height: 34px; border: 1px solid var(--color-border); border-radius: 9px; color: #667085; background: white; cursor: pointer; }
+.signature-tabs { padding: 14px 26px 0; border-bottom: 1px solid var(--color-border); }
+.signature-tabs button { padding: 0 4px 11px; border: 0; border-bottom: 2px solid var(--color-primary); color: var(--color-primary); background: transparent; font-size: 10px; font-weight: 700; }
+.signature-canvas-wrap { position: relative; margin: 20px 26px 0; border: 1.5px dashed #9cb0e8; border-radius: 12px; background: #fbfcff; }
+.signature-canvas-wrap canvas { display: block; width: 100%; height: 210px; touch-action: none; }
+.signature-canvas-wrap > span { position: absolute; right: 0; bottom: 9px; left: 0; color: #b0b7c3; font-size: 8px; text-align: center; pointer-events: none; }
+.signature-error { min-height: 16px; margin: 7px 27px 0; color: var(--color-error); font-size: 9px; }
+.signature-dialog__actions { display: flex; padding: 17px 26px 22px; justify-content: flex-end; gap: 8px; }
+.reject-dialog { padding: 28px; }
+.reject-dialog label { display: grid; margin: 20px 0; gap: 7px; color: #344054; font-size: 10px; font-weight: 700; }
+.reject-dialog textarea { padding: 10px; border: 1px solid #d0d5dd; border-radius: 9px; resize: vertical; }
+.reject-dialog > div { display: flex; justify-content: flex-end; gap: 8px; }
+.reject-action { border: 1px solid #d92d20; color: white; background: #d92d20; }
+.completed-check { display: grid; width: 70px; height: 70px; margin: 0 auto 22px; place-items: center; border-radius: 50%; color: white; background: #12b76a; box-shadow: 0 0 0 11px #ecfdf3; font-size: 30px; }
+.completed-status { display: inline-flex; padding: 6px 9px; align-items: center; gap: 5px; border-radius: 99px; color: #027a48; background: #ecfdf3; font-size: 9px; font-weight: 700; }
+.completed-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.completed-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.completed-feedback { min-height: 17px; margin: 10px 0 0 !important; color: #175cd3 !important; font-size: 9px !important; }
+@media (max-width: 760px) { .signing-header { grid-template-columns: auto minmax(0,1fr) 100px; padding: 0 14px; } .signing-header .brand > span:last-child { display: none; } .signing-document { justify-self: start; text-align: left; } .signing-main { display: block; } .signing-guide { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--color-border); } .signing-guide > .section-label, .signing-guide h1, .signing-guide > p, .signing-guide .recipient-secondary { display: none; } .signing-guide ol { grid-template-columns: repeat(4,1fr); margin: 0; gap: 5px; } .signing-guide li { min-height: 34px; padding: 0; justify-content: center; font-size: 0; } .recipient-viewer { padding: 18px 12px 35px; } .signing-footer { padding: 0 14px; } .signing-footer > span { display: none; } .signing-reject-mobile { display: inline-flex; margin-left: auto; } .consent-panel { right: 14px; bottom: 80px; } }
+@media (max-width: 760px) { .signing-footer { justify-content: space-between; } .signing-footer .signing-reject-mobile { display: inline-flex; margin-left: 0; } }
+@media (max-width: 480px) { .secure-note { font-size: 0; } .request-content, .completed-content { padding: 24px 14px; } .request-card, .completed-card { padding: 28px 20px; border-radius: 18px; } .recipient-field { padding: 5px 6px; } .recipient-field--signature { min-height: 48px; } .signature-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; } .signature-dialog__actions .recipient-primary { grid-column: 1 / span 2; grid-row: 1; } .completed-document { grid-template-columns: auto minmax(0,1fr); } .completed-status { grid-column: 2; width: fit-content; } }
+@media (prefers-reduced-motion: reduce) { .signing-progress i { transition: none; } }
