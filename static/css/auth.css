@@ -45,7 +45,8 @@ a:hover {
 }
 
 button,
-input {
+input,
+select {
     font: inherit;
 }
 
@@ -323,7 +324,7 @@ input {
 }
 
 .form-card--register {
-    width: min(100%, 540px);
+    width: min(100%, 680px);
 }
 
 .form-card__heading {
@@ -365,6 +366,10 @@ input {
     gap: 20px;
 }
 
+.auth-form--register {
+    gap: 16px;
+}
+
 .field-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -389,8 +394,14 @@ input {
     justify-content: space-between;
 }
 
-.field__label-row a {
+.field__label-row a,
+.password-recovery {
     font-size: 12px;
+}
+
+.password-recovery {
+    color: var(--color-primary);
+    cursor: not-allowed;
 }
 
 .field__control {
@@ -411,7 +422,8 @@ input {
     pointer-events: none;
 }
 
-.field input {
+.field input,
+.field select {
     width: 100%;
     height: 50px;
     padding: 0 44px;
@@ -423,21 +435,65 @@ input {
     transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.field__control:not(:has(> svg)) input {
+.field__control:not(:has(> svg)) input,
+.field__control--select select {
     padding-left: 15px;
+}
+
+.field select {
+    padding-right: 42px;
+    appearance: none;
+    cursor: pointer;
+}
+
+.field__control--select::after {
+    position: absolute;
+    right: 16px;
+    width: 8px;
+    height: 8px;
+    transform: translateY(-3px) rotate(45deg);
+    border-right: 2px solid #667085;
+    border-bottom: 2px solid #667085;
+    content: "";
+    pointer-events: none;
 }
 
 .field input::placeholder {
     color: #98a2b3;
 }
 
-.field input:hover {
+.field input:hover,
+.field select:hover {
     border-color: #98a2b3;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 4px rgba(14, 67, 240, 0.1);
+}
+
+.field input:disabled,
+.field select:disabled {
+    border-color: var(--color-border);
+    color: #98a2b3;
+    background: #f2f4f7;
+    cursor: not-allowed;
+}
+
+.field.is-invalid input,
+.field.is-invalid select {
+    border-color: var(--color-error);
+}
+
+.field.is-invalid input:focus,
+.field.is-invalid select:focus {
+    box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.1);
+}
+
+.field.is-valid input,
+.field.is-valid select {
+    border-color: #079455;
 }
 
 .password-toggle {
@@ -470,8 +526,17 @@ input {
 }
 
 .field__hint {
+    margin: -2px 0 0;
     color: var(--color-text-muted);
     font-size: 11px;
+}
+
+.field__error {
+    min-height: 15px;
+    margin: -3px 0 0;
+    color: var(--color-error);
+    font-size: 11px;
+    line-height: 1.35;
 }
 
 .check-control {
@@ -522,6 +587,21 @@ input {
 
 .primary-button:active {
     transform: translateY(0);
+}
+
+.primary-button:disabled {
+    transform: none;
+    background: #98a2b3;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.password-toggle:focus-visible,
+.primary-button:focus-visible,
+.check-control input:focus-visible,
+a:focus-visible {
+    outline: 3px solid rgba(14, 67, 240, 0.3);
+    outline-offset: 2px;
 }
 
 .primary-button svg {
@@ -577,7 +657,7 @@ input {
     }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
     .auth-shell {
         display: block;
     }
