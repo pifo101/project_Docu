@@ -1,6 +1,58 @@
+from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+
+
+INSTITUTIONAL_EMAIL_DOMAIN = "adicla.org.gt"
+
+
+def normalize_institutional_email(email):
+    return email.strip().casefold()
+
+
+def validate_institutional_email(email):
+    _, separator, domain = email.rpartition("@")
+    if not separator or domain.casefold() != INSTITUTIONAL_EMAIL_DOMAIN:
+        raise ValidationError(
+            "Ingrese un correo institucional @adicla.org.gt.",
+            code="invalid_institutional_domain",
+        )
+
+
+class UsuarioManager(BaseUserManager):
+    use_in_migrations = True
+
+    def get_by_natural_key(self, email):
+        return self.get(email=normalize_institutional_email(email))
+
+    def _create_user(self, email, password, **extra_fields):
+        if not email:
+            raise ValueError("El correo electrónico es obligatorio.")
+
+        email = normalize_institutional_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.full_clean(validate_constraints=False)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(email, password, **extra_fields)
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Un superusuario debe tener is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Un superusuario debe tener is_superuser=True.")
+
+        return self._create_user(email, password, **extra_fields)
 
 
 class Comite(models.Model):
@@ -58,6 +110,12 @@ class Cargo(models.Model):
 
 
 class Usuario(AbstractUser):
+    username = None
+    email = models.EmailField(
+        "correo electrónico",
+        unique=True,
+        validators=[validate_institutional_email],
+    )
     comite = models.ForeignKey(
         Comite,
         on_delete=models.PROTECT,
@@ -71,7 +129,10 @@ class Usuario(AbstractUser):
         to_field="codigo",
     )
 
-    REQUIRED_FIELDS = [*AbstractUser.REQUIRED_FIELDS, "comite", "cargo"]
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["first_name", "last_name", "comite", "cargo"]
+
+    objects = UsuarioManager()
 
     class Meta(AbstractUser.Meta):
         verbose_name = "usuario"
@@ -100,4 +161,13 @@ class Usuario(AbstractUser):
         ]
 
     def __str__(self):
-        return self.get_full_name() or self.username
+        return self.get_full_name() or self.email
+
+    def clean(self):
+        super().clean()
+        self.email = normalize_institutional_email(self.email)
+
+    def save(self, *args, **kwargs):
+        self.email = normalize_institutional_email(self.email)
+        validate_institutional_email(self.email)
+        return super().save(*args, **kwargs)
