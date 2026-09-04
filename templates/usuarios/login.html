@@ -13,9 +13,9 @@
         </a>
 
         <div class="brand-panel__content">
-            <span class="eyebrow">Firma digital simple</span>
+            <span class="eyebrow">Gestión y firma de documentos</span>
             <h1 id="brand-heading">Tus acuerdos avanzan.<br><span>Sin papel, sin esperas.</span></h1>
-            <p>Prepara, envía y firma documentos desde cualquier lugar, con la seguridad que tu equipo necesita.</p>
+            <p>Gestiona tus documentos y procesos de firma desde un solo lugar.</p>
         </div>
 
         <div class="document-preview" aria-hidden="true">
@@ -29,7 +29,7 @@
             </div>
         </div>
 
-        <p class="brand-panel__footer">Documentos protegidos y cifrados</p>
+        <p class="brand-panel__footer">Tus documentos, organizados en un solo lugar</p>
     </section>
 
     <section class="form-panel">
@@ -41,35 +41,40 @@
                 <p>Accede a tus documentos y firmas pendientes.</p>
             </div>
 
-            <form method="post" class="auth-form">
+            <form method="post" class="auth-form" data-auth-form="login" novalidate>
                 {% csrf_token %}
-                {{ form.non_field_errors }}
-                <div class="field">
+                {% if form.non_field_errors %}
+                    <div class="form-error-summary" role="alert">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="field{% if form.email.errors %} is-invalid{% endif %}">
                     <label for="{{ form.email.id_for_label }}">Correo institucional</label>
                     <div class="field__control">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/></svg>
-                        <input id="{{ form.email.id_for_label }}" name="{{ form.email.html_name }}" type="email" value="{{ form.email.value|default:'' }}" placeholder="nombre@adicla.org.gt" autocomplete="email" required autofocus>
+                        <input id="{{ form.email.id_for_label }}" name="{{ form.email.html_name }}" type="email" value="{{ form.email.value|default:'' }}" placeholder="usuario@adicla.org.gt" autocomplete="email" aria-describedby="login-email-server-errors login-email-error" aria-invalid="{% if form.email.errors %}true{% else %}false{% endif %}" required autofocus>
                     </div>
-                    {{ form.email.errors }}
+                    <div class="field__server-errors" id="login-email-server-errors" role="alert">{{ form.email.errors }}</div>
+                    <p class="field__error" id="login-email-error" aria-live="polite"></p>
                 </div>
 
-                <div class="field">
+                <div class="field{% if form.password.errors %} is-invalid{% endif %}">
                     <div class="field__label-row">
                         <label for="{{ form.password.id_for_label }}">Contraseña</label>
-                        <a href="#">¿Olvidaste tu contraseña?</a>
+                        <span class="password-recovery" aria-disabled="true" title="Recuperación de contraseña pendiente">¿Olvidaste tu contraseña?</span>
                     </div>
                     <div class="field__control">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
-                        <input id="{{ form.password.id_for_label }}" name="{{ form.password.html_name }}" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" required>
-                        <button class="password-toggle" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                        <input id="{{ form.password.id_for_label }}" name="{{ form.password.html_name }}" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" aria-describedby="login-password-server-errors login-password-error" aria-invalid="{% if form.password.errors %}true{% else %}false{% endif %}" required>
+                        <button class="password-toggle" type="button" aria-controls="{{ form.password.id_for_label }}" aria-label="Mostrar contraseña" aria-pressed="false">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
                         </button>
                     </div>
-                    {{ form.password.errors }}
+                    <div class="field__server-errors" id="login-password-server-errors" role="alert">{{ form.password.errors }}</div>
+                    <p class="field__error" id="login-password-error" aria-live="polite"></p>
                 </div>
 
                 <label class="check-control">
-                    <input type="checkbox" name="remember">
+                    <input type="checkbox" name="remember"{% if request.POST.remember %} checked{% endif %}>
                     <span>Recordarme en este dispositivo</span>
                 </label>
 

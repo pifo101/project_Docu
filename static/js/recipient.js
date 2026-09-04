@@ -200,7 +200,9 @@
     if (completedSigner) {
         try {
             const savedRecipient = JSON.parse(localStorage.getItem("adicla-sign-recipient"));
-            if (savedRecipient?.name) completedSigner.textContent = savedRecipient.name;
+            if (savedRecipient?.name && (!savedRecipient.mode || savedRecipient.mode === "single")) {
+                completedSigner.textContent = savedRecipient.name;
+            }
         } catch (error) {
             console.warn("No se pudo leer el firmante temporal.", error);
         }

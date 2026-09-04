@@ -22,7 +22,7 @@ class AuthPagesTests(TestCase):
         response = self.client.get(reverse("usuarios:register"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Regístrate gratis")
+        self.assertContains(response, "Crear cuenta")
 
     def test_dashboard_page_renders(self):
         response = self.client.get(reverse("usuarios:dashboard"))

@@ -87,15 +87,19 @@ let selectedField = null;
 let activeInteraction = null;
 let autoScrollFrame = null;
 let temporaryDocument = null;
-let recipient = { name: "José Ramírez", email: "jose.ramirez@empresa.com" };
+let recipient = { name: "Destinatarios seleccionados", email: "Información temporal", count: 0 };
+let hasStoredRecipient = false;
 
 try {
-    recipient = { ...recipient, ...(JSON.parse(localStorage.getItem("adicla-sign-recipient")) || {}) };
+    const storedRecipient = JSON.parse(localStorage.getItem("adicla-sign-recipient")) || {};
+    hasStoredRecipient = Boolean(storedRecipient.name);
+    recipient = { ...recipient, ...storedRecipient };
 } catch (error) {
     console.warn("No se pudo leer el destinatario temporal.", error);
 }
 
 function recipientInitials(name) {
+    if (recipient.count > 1) return String(recipient.count);
     return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "D";
 }
 
@@ -647,12 +651,12 @@ async function prepareEditor() {
             return;
         }
 
-        if (temporaryDocument.recipient) recipient = { ...recipient, ...temporaryDocument.recipient };
+        if (temporaryDocument.recipient && !hasStoredRecipient) recipient = { ...recipient, ...temporaryDocument.recipient };
         updateRecipientPresentation();
         const restoredFields = Array.isArray(temporaryDocument.fields)
             ? temporaryDocument.fields.filter((field) => FIELD_TYPES[field.type] && Number.isFinite(field.page))
             : [];
-        documentFields.splice(0, documentFields.length, ...restoredFields.map((field) => ({ ...field, recipient: field.recipient || recipient.name })));
+        documentFields.splice(0, documentFields.length, ...restoredFields.map((field) => ({ ...field, recipient: recipient.name })));
         documentName.textContent = temporaryDocument.name || temporaryDocument.file.name || "Documento PDF";
         pdfObjectUrl = URL.createObjectURL(temporaryDocument.file);
         window.pdfjsLib.GlobalWorkerOptions.workerSrc =

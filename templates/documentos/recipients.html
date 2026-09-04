@@ -1,23 +1,182 @@
-{% extends "base.html" %}{% load static %}
-{% block title %}Agregar destinatarios | ADICLA Sign{% endblock %}{% block body_class %}workflow-page preparation-page{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Seleccionar destinatarios | ADICLA Sign{% endblock %}
+{% block body_class %}workflow-page preparation-page{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/workflow.css' %}">{% endblock %}
+
 {% block content %}
 <div class="preparation-shell">
-    <header class="preparation-header"><a class="brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign"><span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span><span>ADICLA <strong>Sign</strong></span></a><span>Preparar documento</span></header>
-    <nav class="workflow-steps" aria-label="Progreso"><span class="workflow-step workflow-step--complete"><i>✓</i>Documento</span><span class="workflow-step workflow-step--active" aria-current="step"><i>2</i>Destinatario</span><span class="workflow-step"><i>3</i>Campos</span><span class="workflow-step"><i>4</i>Revisar</span></nav>
-    <main class="preparation-content">
-        <section class="preparation-heading"><span class="section-eyebrow">Paso 2 de 4</span><h1>Agregar destinatarios</h1><p>Indica quién necesita revisar y firmar el documento.</p></section>
-        <div class="preparation-grid">
-            <aside class="selected-document-card"><span class="document-icon document-icon--pdf">PDF</span><div><small>Documento seleccionado</small><strong data-workflow-document-name>Contrato de servicios 2026.pdf</strong><span>PDF · Listo para preparar</span></div><i aria-hidden="true">✓</i></aside>
+    <header class="preparation-header">
+        <a class="brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign">
+            <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span>
+            <span>ADICLA <strong>Sign</strong></span>
+        </a>
+        <span>Preparar documento</span>
+    </header>
+
+    <nav class="workflow-steps" aria-label="Progreso">
+        <span class="workflow-step workflow-step--complete"><i>✓</i>Documento</span>
+        <span class="workflow-step workflow-step--active" aria-current="step"><i>2</i>Destinatarios</span>
+        <span class="workflow-step"><i>3</i>Campos</span>
+        <span class="workflow-step"><i>4</i>Revisar</span>
+    </nav>
+
+    <main class="preparation-content recipient-content">
+        <section class="preparation-heading">
+            <span class="section-eyebrow">Paso 2 de 4</span>
+            <h1>Seleccionar destinatarios</h1>
+            <p>Elige quiénes recibirán este documento.</p>
+        </section>
+
+        <div class="recipient-layout">
+            <aside class="recipient-context">
+                <section class="selected-document-card">
+                    <span class="document-icon document-icon--pdf">PDF</span>
+                    <div>
+                        <small>Documento seleccionado</small>
+                        <strong data-workflow-document-name>Contrato de servicios 2026.pdf</strong>
+                        <span>PDF · Listo para preparar</span>
+                    </div>
+                    <i aria-hidden="true">✓</i>
+                </section>
+
+                <section class="workflow-card recipient-summary" aria-labelledby="recipient-summary-title">
+                    <div class="recipient-summary__heading">
+                        <div>
+                            <span class="panel__overline">Destinatarios del documento</span>
+                            <h2 id="recipient-summary-title">Resumen</h2>
+                        </div>
+                        <strong data-recipient-count>0 destinatarios</strong>
+                    </div>
+                    <div class="recipient-summary__content" data-recipient-summary aria-live="polite">
+                        <p>Selecciona un modo para comenzar.</p>
+                    </div>
+                </section>
+            </aside>
+
             <form class="recipient-form workflow-card" data-recipient-form novalidate>
-                <div class="recipient-form__heading"><span class="avatar">1</span><div><h2>Destinatario 1</h2><p>Esta persona recibirá la solicitud.</p></div><span class="action-badge">Necesita firmar</span></div>
-                <div class="form-grid"><label>Nombre completo<input name="recipient_name" autocomplete="name" required placeholder="Ej. José Ramírez" data-recipient-name><small>Ingresa el nombre del destinatario.</small></label><label>Correo electrónico<input name="recipient_email" type="email" autocomplete="email" required placeholder="nombre@empresa.com" data-recipient-email><small>Enviaremos la solicitud a este correo.</small></label></div>
-                <fieldset class="action-type"><legend>Tipo de acción</legend><label><input type="radio" name="action" value="sign" checked><span><i aria-hidden="true">✓</i><strong>Necesita firmar</strong><small>Debe completar los campos y firmar.</small></span></label></fieldset>
-                <button class="add-recipient-button" type="button" data-mock-action="La firma múltiple estará disponible próximamente"><span aria-hidden="true">+</span> Agregar destinatario</button>
-                <p class="form-error" role="alert" aria-live="polite" data-recipient-error></p>
-                <div class="preparation-actions"><a class="outline-action" href="{% url 'documentos:list' %}">Cancelar</a><button class="primary-action" type="submit" data-editor-url="{% url 'documentos:editor' %}">Siguiente <span aria-hidden="true">→</span></button></div>
+                <fieldset class="recipient-modes">
+                    <legend>Tipo de destinatario</legend>
+                    <div class="recipient-mode-grid">
+                        <label class="recipient-mode-card">
+                            <input type="radio" name="recipient_mode" value="single" data-recipient-mode>
+                            <span class="recipient-mode-card__control" aria-hidden="true"></span>
+                            <span class="recipient-mode-card__icon" aria-hidden="true">1</span>
+                            <strong>Una persona</strong>
+                            <small>Envía el documento a un único destinatario.</small>
+                        </label>
+                        <label class="recipient-mode-card">
+                            <input type="radio" name="recipient_mode" value="committee" data-recipient-mode>
+                            <span class="recipient-mode-card__control" aria-hidden="true"></span>
+                            <span class="recipient-mode-card__icon" aria-hidden="true">C</span>
+                            <strong>Comité completo</strong>
+                            <small>Envía el documento a todos los integrantes de un comité y agrega personas adicionales si lo necesitas.</small>
+                        </label>
+                        <label class="recipient-mode-card">
+                            <input type="radio" name="recipient_mode" value="people" data-recipient-mode>
+                            <span class="recipient-mode-card__control" aria-hidden="true"></span>
+                            <span class="recipient-mode-card__icon" aria-hidden="true">+</span>
+                            <strong>Personas específicas</strong>
+                            <small>Selecciona varias personas sin importar el comité al que pertenezcan.</small>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <p class="mock-data-notice"><span aria-hidden="true">i</span> Personas y comités de demostración. Serán reemplazados por datos institucionales.</p>
+
+                <section class="recipient-mode-panel" data-mode-panel="single" aria-labelledby="single-mode-title" hidden>
+                    <div class="recipient-section-heading">
+                        <div><h2 id="single-mode-title">Una persona</h2><p>Busca y selecciona un único destinatario.</p></div>
+                    </div>
+                    <label class="recipient-search-label" for="single-person-search">Buscar persona</label>
+                    <div class="recipient-search">
+                        <span aria-hidden="true">⌕</span>
+                        <input id="single-person-search" type="search" placeholder="Buscar por nombre o correo..." autocomplete="off" data-person-search="single">
+                    </div>
+                    <div class="recipient-results" data-person-results="single" aria-label="Resultados de personas"></div>
+                    <section class="selected-recipient-section" data-single-selection hidden>
+                        <h3>Destinatario seleccionado</h3>
+                        <div data-selected-single></div>
+                    </section>
+                </section>
+
+                <section class="recipient-mode-panel" data-mode-panel="committee" aria-labelledby="committee-mode-title" hidden>
+                    <div class="recipient-section-heading">
+                        <div><h2 id="committee-mode-title">Comité completo</h2><p>Sus integrantes se incluirán automáticamente.</p></div>
+                    </div>
+                    <label class="recipient-search-label" for="committee-select">Seleccionar comité</label>
+                    <div class="recipient-select-control">
+                        <select id="committee-select" data-committee-select>
+                            <option value="">Seleccionar comité</option>
+                        </select>
+                    </div>
+                    <section class="committee-selection" data-committee-selection hidden>
+                        <div class="committee-selection__heading">
+                            <div><strong data-committee-name></strong><span data-committee-size></span></div>
+                            <span class="included-badge">Incluidos automáticamente</span>
+                        </div>
+                        <details class="committee-members">
+                            <summary>Ver integrantes</summary>
+                            <ul data-committee-members></ul>
+                        </details>
+                    </section>
+
+                    <section class="additional-people" data-additional-section hidden aria-labelledby="additional-people-title">
+                        <div class="recipient-section-heading recipient-section-heading--compact">
+                            <div><h3 id="additional-people-title">Personas adicionales</h3><p>Puedes agregar personas que no estén incluidas en el comité.</p></div>
+                        </div>
+                        <label class="recipient-search-label" for="additional-person-search">Buscar personas adicionales</label>
+                        <div class="recipient-search">
+                            <span aria-hidden="true">⌕</span>
+                            <input id="additional-person-search" type="search" placeholder="Buscar por nombre o correo..." autocomplete="off" data-person-search="additional">
+                        </div>
+                        <div class="recipient-results" data-person-results="additional" aria-label="Resultados de personas adicionales"></div>
+                        <div class="compact-selection" data-additional-selection hidden>
+                            <h4>Personas adicionales</h4>
+                            <div class="recipient-chips" data-selected-additional></div>
+                        </div>
+                    </section>
+                </section>
+
+                <section class="recipient-mode-panel" data-mode-panel="people" aria-labelledby="people-mode-title" hidden>
+                    <div class="recipient-section-heading">
+                        <div><h2 id="people-mode-title">Personas específicas</h2><p>Selecciona personas de uno o varios comités.</p></div>
+                    </div>
+                    <div class="recipient-search-tools">
+                        <div>
+                            <label class="recipient-search-label" for="multiple-person-search">Buscar personas</label>
+                            <div class="recipient-search">
+                                <span aria-hidden="true">⌕</span>
+                                <input id="multiple-person-search" type="search" placeholder="Buscar por nombre o correo..." autocomplete="off" data-person-search="people">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="recipient-search-label" for="committee-filter">Filtrar por comité</label>
+                            <div class="recipient-select-control">
+                                <select id="committee-filter" data-committee-filter>
+                                    <option value="">Todos los comités</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="recipient-results" data-person-results="people" aria-label="Resultados de personas"></div>
+                    <section class="selected-recipient-section" data-people-selection hidden>
+                        <h3>Personas seleccionadas</h3>
+                        <div class="selected-people-list" data-selected-people></div>
+                    </section>
+                </section>
+
+                <span class="recipient-results-status" data-recipient-results-status aria-live="polite"></span>
+                <p class="recipient-feedback" role="status" aria-live="polite" data-recipient-error></p>
+                <div class="preparation-actions recipient-actions">
+                    <a class="outline-action" href="{% url 'documentos:list' %}"><span aria-hidden="true">←</span> Volver</a>
+                    <button class="primary-action" type="submit" data-editor-url="{% url 'documentos:editor' %}" disabled>Continuar <span aria-hidden="true">→</span></button>
+                </div>
             </form>
         </div>
     </main>
 </div>
-{% endblock %}{% block extra_js %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}
+{% endblock %}
+
+{% block extra_js %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}

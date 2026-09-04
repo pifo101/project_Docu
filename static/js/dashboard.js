@@ -212,6 +212,8 @@ continueButton?.addEventListener("click", async () => {
 
     try {
         await storePdfForEditor(currentPdf);
+        localStorage.removeItem("adicla-sign-recipient-selection");
+        localStorage.removeItem("adicla-sign-recipient");
         uploadDialog?.close();
         window.location.assign(continueButton.dataset.editorUrl);
     } catch (error) {
