@@ -87,6 +87,9 @@ class RegistroUsuarioTests(TestCase):
 
         self.assertContains(response, "Recursos Humanos")
         self.assertContains(response, "Tecnología")
+        self.assertContains(response, "Dirección Ejecutiva")
+        self.assertContains(response, "Secretaría")
+        self.assertContains(response, "Finanzas")
 
     def test_rechaza_gmail(self):
         response = self.client.post(
