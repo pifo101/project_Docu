@@ -37,86 +37,79 @@
 
             <form method="post" class="auth-form auth-form--register" data-auth-form="register" novalidate>
                 {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class="form-error-summary" role="alert">{{ form.non_field_errors }}</div>
+                {% endif %}
+
                 <div class="field-row">
-                    <div class="field">
-                        <label for="register-first-name">Nombres</label>
+                    <div class="field{% if form.first_name.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.first_name.id_for_label }}">Nombres</label>
                         <div class="field__control">
-                            <input id="register-first-name" name="first_name" type="text" placeholder="Juan Luis Marcos" autocomplete="given-name" aria-describedby="register-first-name-error" required autofocus>
+                            <input id="{{ form.first_name.id_for_label }}" name="{{ form.first_name.html_name }}" type="text" value="{{ form.first_name.value|default:'' }}" placeholder="Juan Luis Marcos" autocomplete="given-name" aria-describedby="register-first-name-server-errors register-first-name-error" aria-invalid="{% if form.first_name.errors %}true{% else %}false{% endif %}" required autofocus>
                         </div>
+                        <div class="field__server-errors" id="register-first-name-server-errors" role="alert">{{ form.first_name.errors }}</div>
                         <p class="field__error" id="register-first-name-error" aria-live="polite"></p>
                     </div>
-                    <div class="field">
-                        <label for="register-last-name">Apellidos</label>
+                    <div class="field{% if form.last_name.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.last_name.id_for_label }}">Apellidos</label>
                         <div class="field__control">
-                            <input id="register-last-name" name="last_name" type="text" placeholder="Mogollón Escobedo" autocomplete="family-name" aria-describedby="register-last-name-error" required>
+                            <input id="{{ form.last_name.id_for_label }}" name="{{ form.last_name.html_name }}" type="text" value="{{ form.last_name.value|default:'' }}" placeholder="Mogollón Escobedo" autocomplete="family-name" aria-describedby="register-last-name-server-errors register-last-name-error" aria-invalid="{% if form.last_name.errors %}true{% else %}false{% endif %}" required>
                         </div>
+                        <div class="field__server-errors" id="register-last-name-server-errors" role="alert">{{ form.last_name.errors }}</div>
                         <p class="field__error" id="register-last-name-error" aria-live="polite"></p>
                     </div>
                 </div>
 
-                <div class="field">
-                    <label for="register-email">Correo institucional</label>
+                <div class="field{% if form.email.errors %} is-invalid{% endif %}">
+                    <label for="{{ form.email.id_for_label }}">Correo institucional</label>
                     <div class="field__control">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/></svg>
-                        <input id="register-email" name="email" type="email" placeholder="usuario@adicla.org.gt" autocomplete="email" aria-describedby="register-email-hint register-email-error" required>
+                        <input id="{{ form.email.id_for_label }}" name="{{ form.email.html_name }}" type="email" value="{{ form.email.value|default:'' }}" placeholder="usuario@adicla.org.gt" autocomplete="email" aria-describedby="register-email-hint register-email-server-errors register-email-error" aria-invalid="{% if form.email.errors %}true{% else %}false{% endif %}" required>
                     </div>
                     <p class="field__hint" id="register-email-hint">Utiliza tu correo institucional @adicla.org.gt</p>
+                    <div class="field__server-errors" id="register-email-server-errors" role="alert">{{ form.email.errors }}</div>
                     <p class="field__error" id="register-email-error" aria-live="polite"></p>
                 </div>
 
                 <div class="field-row">
-                    <div class="field">
-                        <label for="register-committee">Comité</label>
-                        <div class="field__control field__control--select">
-                            <select id="register-committee" name="comite" aria-describedby="register-committee-error" required>
-                                <option value="">Seleccionar comité</option>
-                                {% for comite in comites %}
-                                    <option value="{{ comite.pk }}">{{ comite.nombre }}</option>
-                                {% empty %}
-                                    <option value="mock-comite-pendiente">Comité de ejemplo (temporal)</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                    <div class="field{% if form.comite.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.comite.id_for_label }}">Comité</label>
+                        <div class="field__control field__control--select">{{ form.comite }}</div>
+                        <div class="field__server-errors" id="register-committee-server-errors" role="alert">{{ form.comite.errors }}</div>
                         <p class="field__error" id="register-committee-error" aria-live="polite"></p>
                     </div>
-                    <div class="field">
-                        <label for="register-position">Cargo</label>
-                        <div class="field__control field__control--select">
-                            <select id="register-position" name="cargo" aria-describedby="register-position-error" required>
-                                <option value="">Seleccionar cargo</option>
-                                {% for cargo in cargos %}
-                                    <option value="{{ cargo.codigo }}">{{ cargo.nombre }}</option>
-                                {% empty %}
-                                    <option value="mock-cargo-pendiente">Cargo de ejemplo (temporal)</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                    <div class="field{% if form.cargo.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.cargo.id_for_label }}">Cargo</label>
+                        <div class="field__control field__control--select">{{ form.cargo }}</div>
+                        <div class="field__server-errors" id="register-position-server-errors" role="alert">{{ form.cargo.errors }}</div>
                         <p class="field__error" id="register-position-error" aria-live="polite"></p>
                     </div>
                 </div>
 
                 <div class="field-row">
-                    <div class="field">
-                        <label for="register-password">Contraseña</label>
+                    <div class="field{% if form.password1.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.password1.id_for_label }}">Contraseña</label>
                         <div class="field__control">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
-                            <input id="register-password" name="password" type="password" placeholder="Ingresa tu contraseña" minlength="8" autocomplete="new-password" aria-describedby="register-password-hint register-password-error" required>
-                            <button class="password-toggle" type="button" aria-controls="register-password" aria-label="Mostrar contraseña" aria-pressed="false">
+                            <input id="{{ form.password1.id_for_label }}" name="{{ form.password1.html_name }}" type="password" placeholder="Ingresa tu contraseña" minlength="8" autocomplete="new-password" aria-describedby="register-password-hint register-password-server-errors register-password-error" aria-invalid="{% if form.password1.errors %}true{% else %}false{% endif %}" required>
+                            <button class="password-toggle" type="button" aria-controls="{{ form.password1.id_for_label }}" aria-label="Mostrar contraseña" aria-pressed="false">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
                             </button>
                         </div>
                         <p class="field__hint" id="register-password-hint">Mínimo 8 caracteres.</p>
+                        <div class="field__server-errors" id="register-password-server-errors" role="alert">{{ form.password1.errors }}</div>
                         <p class="field__error" id="register-password-error" aria-live="polite"></p>
                     </div>
-                    <div class="field">
-                        <label for="register-password-confirm">Confirmar contraseña</label>
+                    <div class="field{% if form.password2.errors %} is-invalid{% endif %}">
+                        <label for="{{ form.password2.id_for_label }}">Confirmar contraseña</label>
                         <div class="field__control">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
-                            <input id="register-password-confirm" name="password_confirm" type="password" placeholder="Repite tu contraseña" autocomplete="new-password" aria-describedby="register-password-confirm-error" required>
-                            <button class="password-toggle" type="button" aria-controls="register-password-confirm" aria-label="Mostrar contraseña" aria-pressed="false">
+                            <input id="{{ form.password2.id_for_label }}" name="{{ form.password2.html_name }}" type="password" placeholder="Repite tu contraseña" autocomplete="new-password" aria-describedby="register-password-confirm-server-errors register-password-confirm-error" aria-invalid="{% if form.password2.errors %}true{% else %}false{% endif %}" required>
+                            <button class="password-toggle" type="button" aria-controls="{{ form.password2.id_for_label }}" aria-label="Mostrar contraseña" aria-pressed="false">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
                             </button>
                         </div>
+                        <div class="field__server-errors" id="register-password-confirm-server-errors" role="alert">{{ form.password2.errors }}</div>
                         <p class="field__error" id="register-password-confirm-error" aria-live="polite"></p>
                     </div>
                 </div>

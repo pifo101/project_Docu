@@ -30,15 +30,15 @@ const validators = {
             : "Ingresa tu correo institucional.",
         comite: (input) => input.value ? "" : "Selecciona un comité.",
         cargo: (input) => input.value ? "" : "Selecciona un cargo.",
-        password: (input) => input.value.length >= 8
+        password1: (input) => input.value.length >= 8
             ? ""
             : "La contraseña debe tener al menos 8 caracteres.",
-        password_confirm: (input, form) => {
+        password2: (input, form) => {
             if (!input.value) {
                 return "Confirma tu contraseña.";
             }
 
-            return input.value === form.elements.password.value
+            return input.value === form.elements.password1.value
                 ? ""
                 : "Las contraseñas no coinciden.";
         },
@@ -70,8 +70,8 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
         input.addEventListener(eventName, () => {
             validateField(input);
 
-            if (input.name === "password" && form.elements.password_confirm?.value) {
-                validateField(form.elements.password_confirm);
+            if (input.name === "password1" && form.elements.password2?.value) {
+                validateField(form.elements.password2);
             }
         });
         input.addEventListener("blur", () => validateField(input));

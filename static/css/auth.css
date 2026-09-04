@@ -539,6 +539,31 @@ select {
     line-height: 1.35;
 }
 
+.field__server-errors:empty {
+    display: none;
+}
+
+.field__server-errors .errorlist,
+.form-error-summary .errorlist {
+    margin: -3px 0 0;
+    padding: 0;
+    color: var(--color-error);
+    font-size: 11px;
+    line-height: 1.4;
+    list-style: none;
+}
+
+.form-error-summary {
+    padding: 11px 13px;
+    border: 1px solid rgba(217, 45, 32, 0.25);
+    border-radius: var(--radius-sm);
+    background: #fff4f2;
+}
+
+.form-error-summary .errorlist {
+    margin: 0;
+}
+
 .check-control {
     display: flex;
     width: fit-content;

@@ -31,8 +31,10 @@ class DocumentsPageTests(TestCase):
         response = self.client.get(reverse("documentos:recipients"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Agregar destinatarios")
-        self.assertContains(response, "Necesita firmar")
+        self.assertContains(response, "Seleccionar destinatarios")
+        self.assertContains(response, "Una persona")
+        self.assertContains(response, "Comité completo")
+        self.assertContains(response, "Personas específicas")
         self.assertContains(response, 'data-recipient-form')
 
     def test_review_page_renders_summary_and_success_dialog(self):

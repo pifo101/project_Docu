@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
+from .forms import RegistroUsuarioForm, UsuarioAdminChangeForm
 from .models import Cargo, Comite, Usuario
 
 
@@ -20,11 +21,52 @@ class CargoAdmin(admin.ModelAdmin):
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (
-        ("Organizacion", {"fields": ("comite", "cargo")}),
+    add_form = RegistroUsuarioForm
+    form = UsuarioAdminChangeForm
+    model = Usuario
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        ("Información personal", {"fields": ("first_name", "last_name")}),
+        ("Organización", {"fields": ("comite", "cargo")}),
+        (
+            "Permisos",
+            {
+                "fields": (
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "user_permissions",
+                )
+            },
+        ),
+        ("Fechas importantes", {"fields": ("last_login", "date_joined")}),
     )
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        ("Organizacion", {"fields": ("comite", "cargo")}),
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "comite",
+                    "cargo",
+                    "password1",
+                    "password2",
+                ),
+            },
+        ),
     )
-    list_display = UserAdmin.list_display + ("comite", "cargo")
+    list_display = (
+        "email",
+        "first_name",
+        "last_name",
+        "comite",
+        "cargo",
+        "is_staff",
+    )
     list_filter = UserAdmin.list_filter + ("comite", "cargo")
+    search_fields = ("email", "first_name", "last_name")
+    ordering = ("email",)
