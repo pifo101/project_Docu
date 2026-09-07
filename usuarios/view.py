@@ -4,7 +4,14 @@ from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from documentos.services import (
+    PENDING_RECIPIENT_STATES,
+    recipient_documents_context,
+    recipient_documents_queryset,
+)
+
 from .forms import LoginUsuarioForm, RegistroUsuarioForm
+from .models import Cargo
 
 
 def login_view(request):
@@ -37,18 +44,21 @@ def register_view(request):
 
 @login_required
 def dashboard_view(request):
-    if request.user.is_staff or request.user.is_superuser:
+    if (
+        request.user.is_staff
+        or request.user.is_superuser
+        or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
+    ):
         return render(request, "usuarios/dashboard.html")
 
-    context = {
-        "documents": (),
-        "pending_documents": (),
-        "recent_documents": (),
-        "document_count": 0,
-        "pending_count": 0,
-        "completed_count": 0,
-        "document_backend_available": False,
-    }
+    queryset = recipient_documents_queryset(request.user)
+    context = recipient_documents_context(request.user)
+    context.update(
+        pending_documents=queryset.filter(
+            estado__in=PENDING_RECIPIENT_STATES
+        )[:5],
+        recent_documents=queryset[:5],
+    )
     return render(request, "documentos/user_dashboard.html", context)
 
 
@@ -56,7 +66,11 @@ def dashboard_view(request):
 def profile_view(request):
     template_name = (
         "usuarios/profile.html"
-        if request.user.is_staff or request.user.is_superuser
+        if (
+            request.user.is_staff
+            or request.user.is_superuser
+            or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
+        )
         else "usuarios/user_account.html"
     )
     return render(request, template_name)

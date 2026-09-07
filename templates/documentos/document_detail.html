@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ documento.nombre_original }} | ADICLA Sign{% endblock %}
+{% block content %}
+<main class="dashboard-content workflow-content">
+    <p><a href="{% url 'documentos:list' %}">Mis documentos</a></p>
+    <h1>{{ documento.nombre_original }}</h1>
+    <dl>
+        <dt>Nombre original</dt><dd>{{ documento.nombre_original }}</dd>
+        <dt>Tamaño</dt><dd>{{ documento.tamano }} bytes</dd>
+        <dt>SHA-256</dt><dd>{{ documento.hash_sha256 }}</dd>
+        <dt>Creado</dt><dd>{{ documento.fecha_creacion }}</dd>
+    </dl>
+    <a href="{% url 'documentos:download' documento.pk %}">Descargar PDF</a>
+    {% if documento.envio %}
+    <section>
+        <h2>Estado de destinatarios</h2>
+        <ul>
+            {% for destinatario in documento.envio.destinatarios.all %}
+            <li>{{ destinatario.usuario }} - {{ destinatario.get_estado_display }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+</main>
+{% endblock %}

@@ -30,9 +30,6 @@ const selectedMeta = selectedFile?.querySelector("small");
 const removeFileButton = document.querySelector(".selected-file__remove");
 const continueButton = document.querySelector(".upload-continue");
 const maxFileSize = 20 * 1024 * 1024;
-const editorDatabaseName = "adicla-sign-editor";
-const editorStoreName = "temporary-documents";
-const editorDocumentKey = "current-pdf";
 let dragDepth = 0;
 let currentPdf = null;
 
@@ -84,38 +81,6 @@ function selectPdf(file) {
     if (selectedFile) selectedFile.hidden = false;
     if (continueButton) continueButton.disabled = false;
     currentPdf = file;
-}
-
-function storePdfForEditor(file) {
-    return new Promise((resolve, reject) => {
-        const openRequest = indexedDB.open(editorDatabaseName, 1);
-
-        openRequest.addEventListener("upgradeneeded", () => {
-            if (!openRequest.result.objectStoreNames.contains(editorStoreName)) {
-                openRequest.result.createObjectStore(editorStoreName);
-            }
-        });
-        openRequest.addEventListener("error", () => reject(openRequest.error));
-        openRequest.addEventListener("success", () => {
-            const database = openRequest.result;
-            const transaction = database.transaction(editorStoreName, "readwrite");
-            const store = transaction.objectStore(editorStoreName);
-
-            store.put({ file, name: file.name }, editorDocumentKey);
-            transaction.addEventListener("complete", () => {
-                database.close();
-                resolve();
-            });
-            transaction.addEventListener("error", () => {
-                database.close();
-                reject(transaction.error);
-            });
-            transaction.addEventListener("abort", () => {
-                database.close();
-                reject(transaction.error);
-            });
-        });
-    });
 }
 
 document.querySelectorAll("[data-upload-open]").forEach((button) => {
@@ -196,6 +161,7 @@ dropZone?.addEventListener("drop", (event) => {
         showUploadError("Carga un solo documento PDF a la vez.");
         return;
     }
+    uploadInput.files = event.dataTransfer.files;
     selectPdf(event.dataTransfer.files[0]);
 });
 
@@ -204,26 +170,14 @@ removeFileButton?.addEventListener("click", () => {
     uploadInput?.focus();
 });
 
-continueButton?.addEventListener("click", async () => {
-    if (!currentPdf) return;
-
-    continueButton.disabled = true;
-    continueButton.textContent = "Preparando...";
-
-    try {
-        await storePdfForEditor(currentPdf);
-        localStorage.removeItem("adicla-sign-recipient-selection");
-        localStorage.removeItem("adicla-sign-recipient");
-        uploadDialog?.close();
-        window.location.assign(continueButton.dataset.editorUrl);
-    } catch (error) {
-        console.error("No se pudo preparar el PDF para el editor.", error);
-        if (uploadError) {
-            uploadError.textContent = "No se pudo abrir el editor. Intenta seleccionar el PDF nuevamente.";
-        }
-        continueButton.disabled = false;
-        continueButton.textContent = "Continuar";
+uploadForm?.addEventListener("submit", (event) => {
+    if (!currentPdf) {
+        event.preventDefault();
+        showUploadError("Selecciona un archivo PDF para continuar.");
+        return;
     }
+    continueButton.disabled = true;
+    continueButton.textContent = "Cargando...";
 });
 
 window.addEventListener("pageshow", (event) => {

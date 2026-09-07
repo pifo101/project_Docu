@@ -9,6 +9,7 @@
     <div class="dashboard-main">
         <header class="dashboard-header"><button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="dashboard-header__title"><span class="mobile-logo">ADICLA <strong>Sign</strong></span><p>Documentos recibidos</p></div><a class="user-account-link" href="{% url 'usuarios:profile' %}">Mi cuenta</a></header>
         <main class="dashboard-content documents-content user-portal-content">
+            {% if messages %}<div class="user-portal-messages">{% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}</div>{% endif %}
             <section class="documents-heading" aria-labelledby="user-documents-title"><div><span class="section-eyebrow">Documentos</span><h1 id="user-documents-title">Mis documentos</h1><p>Consulta únicamente los documentos que te han sido asignados.</p></div></section>
             <section class="documents-panel" aria-label="Listado de documentos asignados">
                 <nav class="document-filters" aria-label="Filtrar documentos">

@@ -1,6 +1,10 @@
 <article class="document-row">
     <div class="document-icon document-icon--pdf">PDF</div>
-    <div class="document-info"><strong>{{ recipient_document.document.name }}</strong><span>Enviado por {{ recipient_document.sender_name }} · {{ recipient_document.received_at|date:"d/m/Y" }}</span></div>
-    <span class="status status--{{ recipient_document.status_css }}"><i></i>{{ recipient_document.status_label }}</span>
-    <a class="user-row-action" href="{{ recipient_document.detail_url }}">{{ recipient_document.action_label }}</a>
+    <div class="document-info"><strong>{{ recipient_document.envio.documento.nombre_original }}</strong><span>Enviado por {{ recipient_document.envio.remitente }} · {{ recipient_document.envio.fecha_envio|date:"d/m/Y" }}</span></div>
+    <span class="status{% if recipient_document.estado == 'FIRMADO' %} status--complete{% elif recipient_document.estado == 'VISTO' %} status--viewed{% else %} status--pending{% endif %}"><i></i>{{ recipient_document.get_estado_display }}</span>
+    {% if recipient_document.estado == 'FIRMADO' %}
+        <a class="user-row-action" href="{% url 'documentos:received_document' recipient_document.pk %}">Ver documento</a>
+    {% else %}
+        <a class="user-row-action" href="{% url 'firmas:recipient_sign' recipient_document.pk %}">Revisar</a>
+    {% endif %}
 </article>

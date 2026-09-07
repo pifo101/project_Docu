@@ -10,8 +10,9 @@
         </button>
     </div>
 
-    <form class="upload-form" novalidate>
-        <input class="upload-input" id="pdf-file" name="document" type="file" accept="application/pdf,.pdf" aria-describedby="upload-rules upload-error">
+    <form class="upload-form" method="post" action="{% url 'documentos:upload' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input class="upload-input" id="pdf-file" name="archivo" type="file" accept="application/pdf,.pdf" aria-describedby="upload-rules upload-error">
         <label class="drop-zone" for="pdf-file" tabindex="0">
             <span class="drop-zone__art" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v5h4M12 17V11M9.5 13.5L12 11l2.5 2.5"/></svg>
@@ -21,10 +22,10 @@
                 <strong>Arrastra tu documento aquí</strong>
                 <span>o <em>selecciona un archivo</em> desde tu equipo</span>
             </span>
-            <small id="upload-rules">Solo PDF · Máximo 20 MB</small>
+            <small id="upload-rules">Solo PDF · Máximo {{ documento_max_file_size_mb|default:20 }} MB</small>
         </label>
 
-        <p class="upload-error" id="upload-error" role="alert" aria-live="polite"></p>
+        <p class="upload-error" id="upload-error" role="alert" aria-live="polite">{{ form.archivo.errors }}</p>
 
         <div class="selected-file" aria-live="polite" hidden>
             <span class="selected-file__icon" aria-hidden="true">PDF</span>
@@ -45,7 +46,7 @@
             <span><i aria-hidden="true"></i> Tu archivo se procesará de forma segura</span>
             <div>
                 <button class="upload-cancel" type="button" data-upload-close>Cancelar</button>
-                <button class="upload-continue" type="button" data-editor-url="{% url 'documentos:recipients' %}" disabled>Continuar</button>
+                <button class="upload-continue" type="submit" disabled>Continuar</button>
             </div>
         </div>
     </form>

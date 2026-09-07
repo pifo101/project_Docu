@@ -1,23 +1,30 @@
-{% extends "base.html" %}{% load static %}
-{% block title %}Revisar y enviar | ADICLA Sign{% endblock %}{% block body_class %}workflow-page preparation-page{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Revisar y enviar | ADICLA Sign{% endblock %}
+{% block body_class %}workflow-page preparation-page{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/workflow.css' %}">{% endblock %}
 {% block content %}
 <div class="preparation-shell">
-    <header class="preparation-header"><a class="brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign"><span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span><span>ADICLA <strong>Sign</strong></span></a><span>Preparar documento</span></header>
-    <nav class="workflow-steps" aria-label="Progreso"><span class="workflow-step workflow-step--complete"><i>✓</i>Documento</span><span class="workflow-step workflow-step--complete"><i>✓</i>Destinatarios</span><span class="workflow-step workflow-step--complete"><i>✓</i>Campos</span><span class="workflow-step workflow-step--active" aria-current="step"><i>4</i>Revisar</span></nav>
+    <header class="preparation-header"><a class="brand" href="{% url 'usuarios:dashboard' %}">ADICLA <strong>Sign</strong></a><span>Preparar documento</span></header>
+    <nav class="workflow-steps" aria-label="Progreso"><span class="workflow-step workflow-step--complete"><i>✓</i>Documento</span><span class="workflow-step workflow-step--complete"><i>✓</i>Destinatarios</span><span class="workflow-step workflow-step--active"><i>3</i>Revisar</span></nav>
     <main class="preparation-content review-content">
-        <section class="preparation-heading"><span class="section-eyebrow">Paso 4 de 4</span><h1>Revisar y enviar</h1><p>Confirma la información antes de enviar la solicitud.</p></section>
-        <p class="workflow-alert" data-review-recipient-error role="alert" hidden>No hay destinatarios preparados. <a href="{% url 'documentos:recipients' %}">Volver a seleccionar destinatarios</a>.</p>
-        <form class="review-layout" data-review-form>
+        <section class="preparation-heading"><span class="section-eyebrow">Confirmación</span><h1>Revisar y enviar</h1><p>Confirma la información antes de enviar la solicitud.</p></section>
+        {% if messages %}{% for message in messages %}<p class="workflow-alert" role="alert">{{ message }}</p>{% endfor %}{% endif %}
+        {% if documento %}
+        <form class="review-layout" method="post" action="{% url 'documentos:send' documento.pk %}">
+            {% csrf_token %}
             <div class="review-sections">
-                <section class="workflow-card review-section"><div class="review-section__icon">PDF</div><div><span>Documento</span><h2 data-review-document>Contrato de servicios 2026.pdf</h2><p>PDF preparado para firma</p></div></section>
-                <section class="workflow-card review-section review-section--recipients"><span class="avatar" aria-hidden="true">D</span><div><span>Destinatarios del documento</span><h2 data-review-recipient>Destinatarios seleccionados</h2><p data-review-email>Información temporal</p><ul class="review-recipient-list" data-review-recipient-list></ul></div><span class="action-badge">Destinatarios</span></section>
-                <section class="workflow-card fields-summary"><div><span class="panel__overline">Campos</span><h2>Campos preparados</h2></div><dl><div><dt>Total</dt><dd data-review-fields>0</dd></div><div><dt>Firma requerida</dt><dd data-review-signature>No</dd></div><div><dt>Otros campos</dt><dd data-review-other>0</dd></div></dl></section>
-                <section class="workflow-card message-form"><div><span class="panel__overline">Mensaje</span><h2>Mensaje para los destinatarios</h2></div><label>Asunto<input name="subject" value="Andrea Morales te envía un documento" required></label><label>Mensaje opcional<textarea name="message" rows="4" placeholder="Agrega instrucciones o un mensaje personal...">Hola, por favor revisa este documento. Gracias.</textarea></label></section>
+                <section class="workflow-card review-section"><div class="review-section__icon">PDF</div><div><span>Documento</span><h2>{{ documento.nombre_original }}</h2><p>PDF listo para distribución interna</p></div></section>
+                <section class="workflow-card review-section review-section--recipients"><span class="avatar">C</span><div><span>Comité</span><h2>{{ comite.nombre }}</h2><p>{{ integrantes|length }} destinatario{% if integrantes|length != 1 %}s{% endif %}</p><ul class="review-recipient-list">{% for integrante in integrantes %}<li>{{ integrante }} · {{ integrante.cargo.nombre }}</li>{% empty %}<li>No hay otros integrantes activos.</li>{% endfor %}</ul></div><span class="action-badge">Comité completo</span></section>
             </div>
-            <aside class="workflow-card send-card"><span class="panel__overline">Vencimiento</span><h2>¿Hasta cuándo estará disponible?</h2><label for="expiration-date">Fecha de vencimiento</label><input id="expiration-date" name="expiration" type="date" value="2026-09-10" min="2026-09-03" required><p><i aria-hidden="true">i</i> Los destinatarios verán esta fecha en su solicitud.</p><div class="send-card__actions"><a class="outline-action" href="{% url 'documentos:editor' %}">Volver</a><button class="primary-action" type="submit" data-review-submit disabled>Enviar solicitud</button></div></aside>
+            <aside class="workflow-card send-card"><span class="panel__overline">Distribución interna</span><h2>Enviar al comité</h2><p>El documento quedará disponible en Pendientes para cada integrante activo.</p><div class="send-card__actions"><a class="outline-action" href="{% url 'documentos:committee_recipients' documento.pk %}">Volver</a><button class="primary-action" type="submit"{% if not integrantes %} disabled{% endif %}>Enviar solicitud</button></div></aside>
         </form>
+        {% else %}
+        <p class="workflow-alert" data-review-recipient-error role="alert" hidden>No hay destinatarios preparados. <a href="{% url 'documentos:recipients' %}">Volver a seleccionar destinatarios</a>.</p>
+        <form class="review-layout" data-review-form><section class="workflow-card review-section"><div><span>Documento</span><h2 data-review-document>Contrato de servicios 2026.pdf</h2><p>Destinatarios seleccionados</p><ul data-review-recipient-list></ul></div></section><button type="submit" data-review-submit disabled>Enviar solicitud</button></form>
+        <dialog data-success-dialog><h2>Solicitud preparada</h2><p>La simulación de envío se completó correctamente.</p><span data-success-recipient></span><span data-success-email></span></dialog>
+        {% endif %}
     </main>
 </div>
-<dialog class="success-dialog" data-success-dialog aria-labelledby="success-title"><span class="success-check" aria-hidden="true">✓</span><h2 id="success-title">Solicitud preparada</h2><p>La simulación de envío se completó correctamente.</p><div class="success-summary"><span>Destinatarios del documento</span><strong data-success-recipient>Destinatarios seleccionados</strong><small data-success-email>Información temporal</small></div><a class="primary-action" href="{% url 'documentos:detail' %}">Ver seguimiento</a><a class="text-action" href="{% url 'usuarios:dashboard' %}">Volver al panel</a></dialog>
-{% endblock %}{% block extra_js %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}
+{% endblock %}
+{% block extra_js %}{% if not documento %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endif %}{% endblock %}

@@ -44,6 +44,20 @@
     text-decoration: none;
 }
 
+.user-portal-messages {
+    margin-bottom: 20px;
+}
+
+.user-portal-messages p {
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid #abefc6;
+    border-radius: 10px;
+    color: #067647;
+    background: #ecfdf3;
+    font-size: 13px;
+}
+
 .user-attention {
     margin-top: 28px;
 }

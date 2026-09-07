@@ -35,7 +35,7 @@
                     <span class="document-icon document-icon--pdf">PDF</span>
                     <div>
                         <small>Documento seleccionado</small>
-                        <strong data-workflow-document-name>Contrato de servicios 2026.pdf</strong>
+                        <strong data-workflow-document-name>{{ documento.nombre_original|default:"Contrato de servicios 2026.pdf" }}</strong>
                         <span>PDF · Listo para preparar</span>
                     </div>
                     <i aria-hidden="true">✓</i>
@@ -55,6 +55,26 @@
                 </section>
             </aside>
 
+            {% if documento %}
+            <form class="recipient-form workflow-card" method="get" action="{% url 'documentos:send_review' documento.pk %}">
+                <fieldset class="recipient-modes">
+                    <legend>Tipo de destinatario</legend>
+                    <div class="recipient-mode-grid">
+                        <label class="recipient-mode-card"><input type="radio" disabled><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">1</span><strong>Una persona</strong><small>Disponible en una etapa posterior.</small></label>
+                        <label class="recipient-mode-card"><input type="radio" checked><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">C</span><strong>Comité completo</strong><small>Envía el documento a los integrantes activos de tu comité.</small></label>
+                        <label class="recipient-mode-card"><input type="radio" disabled><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">+</span><strong>Personas específicas</strong><small>Disponible en una etapa posterior.</small></label>
+                    </div>
+                </fieldset>
+                <section class="recipient-mode-panel">
+                    <div class="recipient-section-heading"><div><h2>{{ comite.nombre }}</h2><p>El comité se determina a partir de tu usuario y no puede cambiarse aquí.</p></div></div>
+                    <section class="committee-selection">
+                        <div class="committee-selection__heading"><div><strong>{{ comite.nombre }}</strong><span>{{ integrantes|length }} destinatario{% if integrantes|length != 1 %}s{% endif %}</span></div><span class="included-badge">Incluidos automáticamente</span></div>
+                        <details class="committee-members" open><summary>Ver integrantes</summary><ul>{% for integrante in integrantes %}<li>{{ integrante }} · {{ integrante.cargo.nombre }}</li>{% empty %}<li>No hay otros integrantes activos en este comité.</li>{% endfor %}</ul></details>
+                    </section>
+                </section>
+                <div class="preparation-actions recipient-actions"><a class="outline-action" href="{% url 'documentos:list' %}"><span aria-hidden="true">←</span> Volver</a><button class="primary-action" type="submit"{% if not integrantes %} disabled{% endif %}>Continuar <span aria-hidden="true">→</span></button></div>
+            </form>
+            {% else %}
             <form class="recipient-form workflow-card" data-recipient-form novalidate>
                 <fieldset class="recipient-modes">
                     <legend>Tipo de destinatario</legend>
@@ -174,9 +194,10 @@
                     <button class="primary-action" type="submit" data-editor-url="{% url 'documentos:editor' %}" disabled>Continuar <span aria-hidden="true">→</span></button>
                 </div>
             </form>
+            {% endif %}
         </div>
     </main>
 </div>
 {% endblock %}
 
-{% block extra_js %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endblock %}
+{% block extra_js %}{% if not documento %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endif %}{% endblock %}

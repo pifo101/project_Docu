@@ -6,6 +6,7 @@ from . import view
 app_name = "firmas"
 
 urlpatterns = [
+    path("destinatarios/<int:pk>/firmar/", view.recipient_sign_view, name="recipient_sign"),
     path("solicitud-demo/", view.request_view, name="request"),
     path("solicitud-demo/revisar/", view.sign_view, name="sign"),
     path("solicitud-demo/completado/", view.completed_view, name="completed"),
