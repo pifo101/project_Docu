@@ -110,7 +110,11 @@ def upload_document_view(request):
 
 @login_required
 def owned_document_detail_view(request, pk):
-    documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
+    documento = get_object_or_404(
+        Documento.objects.prefetch_related("envio__destinatarios__usuario"),
+        pk=pk,
+        propietario=request.user,
+    )
     return render(request, "documentos/document_detail.html", {"documento": documento})
 
 
