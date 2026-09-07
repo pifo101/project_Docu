@@ -11,5 +11,15 @@
         <dt>Creado</dt><dd>{{ documento.fecha_creacion }}</dd>
     </dl>
     <a href="{% url 'documentos:download' documento.pk %}">Descargar PDF</a>
+    {% if documento.envio %}
+    <section>
+        <h2>Estado de destinatarios</h2>
+        <ul>
+            {% for destinatario in documento.envio.destinatarios.all %}
+            <li>{{ destinatario.usuario }} - {{ destinatario.get_estado_display }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
 </main>
 {% endblock %}

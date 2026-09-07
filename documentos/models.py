@@ -77,6 +77,7 @@ class DestinatarioDocumento(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = "PENDIENTE", "Pendiente"
         VISTO = "VISTO", "Visto"
+        FIRMADO = "FIRMADO", "Firmado"
 
     envio = models.ForeignKey(
         EnvioDocumento,

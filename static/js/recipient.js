@@ -9,6 +9,7 @@
     const signatureDialog = document.querySelector("[data-signature-dialog]");
     const signatureCanvas = document.querySelector("[data-signature-canvas]");
     const signatureError = document.querySelector("[data-signature-error]");
+    const signatureInput = document.querySelector("[data-signature-input]");
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
@@ -40,32 +41,13 @@
         context.strokeRect(72, 70, 576, 792);
     }
 
-    function readTemporaryPdf() {
-        return new Promise((resolve) => {
-            if (!window.indexedDB) return resolve(null);
-            const request = indexedDB.open("adicla-sign-editor", 1);
-            request.addEventListener("upgradeneeded", () => {
-                if (!request.result.objectStoreNames.contains("temporary-documents")) request.result.createObjectStore("temporary-documents");
-            });
-            request.addEventListener("error", () => resolve(null));
-            request.addEventListener("success", () => {
-                const database = request.result;
-                const transaction = database.transaction("temporary-documents", "readonly");
-                const getRequest = transaction.objectStore("temporary-documents").get("current-pdf");
-                getRequest.addEventListener("success", () => resolve(getRequest.result?.file || null));
-                getRequest.addEventListener("error", () => resolve(null));
-                transaction.addEventListener("complete", () => database.close());
-            });
-        });
-    }
-
     async function renderRecipientDocument() {
         if (!documentCanvas || !window.pdfjsLib) return drawMockDocument();
         try {
-            const file = await readTemporaryPdf();
-            if (!file) return drawMockDocument();
+            const pdfUrl = documentCanvas.dataset.pdfUrl;
+            if (!pdfUrl) return drawMockDocument();
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-            const pdf = await window.pdfjsLib.getDocument(await file.arrayBuffer()).promise;
+            const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
             const page = await pdf.getPage(1);
             const baseViewport = page.getViewport({ scale: 1 });
             const scale = 720 / baseViewport.width;
@@ -76,7 +58,7 @@
             documentCanvas.parentElement.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
             await page.render({ canvasContext: documentCanvas.getContext("2d"), viewport: page.getViewport({ scale: scale * ratio }) }).promise;
         } catch (error) {
-            console.warn("No se pudo mostrar el PDF temporal; se utilizará la vista de demostración.", error);
+            console.warn("No se pudo mostrar el PDF; se utilizará la vista de demostración.", error);
             drawMockDocument();
         }
     }
@@ -173,6 +155,7 @@
         const signatureField = document.querySelector('[data-completable="signature"]');
         const image = document.createElement("img");
         image.src = signatureCanvas.toDataURL("image/png");
+        if (signatureInput) signatureInput.value = image.src;
         image.alt = "Firma dibujada";
         signatureField.querySelector("[data-field-value], img")?.replaceWith(image);
         signatureField.classList.add("field-complete");
@@ -181,14 +164,9 @@
     });
 
     consentCheckbox?.addEventListener("change", () => { finalizeButton.disabled = !consentCheckbox.checked; });
-    finalizeButton?.addEventListener("click", () => {
-        if (consentCheckbox.checked) window.location.assign(finalizeButton.dataset.finalizeUrl);
-    });
-
     const rejectDialog = document.querySelector("[data-reject-dialog]");
     document.querySelectorAll("[data-reject-open]").forEach((button) => button.addEventListener("click", () => rejectDialog?.showModal()));
     document.querySelector("[data-reject-close]")?.addEventListener("click", () => rejectDialog?.close());
-
     document.querySelectorAll("[data-completed-action]").forEach((button) => {
         button.addEventListener("click", () => {
             const feedback = document.querySelector("[data-completed-feedback]");
