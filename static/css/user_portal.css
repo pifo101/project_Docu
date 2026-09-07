@@ -1,0 +1,182 @@
+.user-portal-content {
+    max-width: 1280px;
+}
+
+.user-sidebar__logout {
+    margin-top: 8px;
+}
+
+.user-sidebar__logout button {
+    width: 100%;
+    padding: 10px;
+    border: 0;
+    color: rgba(255, 255, 255, 0.7);
+    background: transparent;
+    cursor: pointer;
+}
+
+.user-sidebar__logout button:hover,
+.user-sidebar__logout button:focus-visible {
+    color: white;
+    text-decoration: underline;
+}
+
+.user-account-link,
+.user-row-action,
+.user-logout-button {
+    display: inline-flex;
+    min-height: 40px;
+    padding: 0 16px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #d0d5dd;
+    border-radius: 10px;
+    color: #344054;
+    background: white;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.user-account-link:hover,
+.user-row-action:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.user-attention {
+    margin-top: 28px;
+}
+
+.user-recent {
+    margin-top: 22px;
+}
+
+.user-empty {
+    padding: 52px 24px;
+    text-align: center;
+}
+
+.user-empty__icon {
+    display: grid;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 14px;
+    place-items: center;
+    border-radius: 18px;
+    color: #027a48;
+    background: #ecfdf3;
+}
+
+.user-empty__icon svg {
+    width: 28px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.user-empty h3 {
+    margin: 0 0 7px;
+    font-family: "Manrope", Arial, sans-serif;
+}
+
+.user-empty p,
+.user-recent__empty {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+.user-recent__empty {
+    padding: 28px;
+}
+
+.user-documents-list .document-row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.document-filter {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.user-account-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    padding: clamp(24px, 4vw, 42px);
+    align-items: start;
+    gap: 24px;
+}
+
+.user-account-avatar {
+    display: grid;
+    width: 72px;
+    height: 72px;
+    place-items: center;
+    border-radius: 20px;
+    color: var(--color-dark-blue);
+    background: var(--color-accent);
+    font-family: "Manrope", Arial, sans-serif;
+    font-weight: 800;
+}
+
+.user-account-card h2 {
+    margin: 0 0 4px;
+}
+
+.user-account-card p {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.user-account-card dl {
+    display: flex;
+    margin: 24px 0 0;
+    gap: 40px;
+}
+
+.user-account-card dl div {
+    display: grid;
+    gap: 4px;
+}
+
+.user-account-card dt {
+    color: var(--color-text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.user-account-card dd {
+    margin: 0;
+    font-weight: 700;
+}
+
+.user-logout-button {
+    color: var(--color-error);
+    cursor: pointer;
+}
+
+@media (max-width: 680px) {
+    .user-account-card {
+        grid-template-columns: auto 1fr;
+    }
+
+    .user-account-card form {
+        grid-column: 1 / -1;
+    }
+
+    .user-logout-button {
+        width: 100%;
+    }
+
+    .user-documents-list .document-row {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .user-documents-list .status,
+    .user-documents-list .user-row-action {
+        grid-column: 2;
+        justify-self: start;
+    }
+}

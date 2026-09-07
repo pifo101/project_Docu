@@ -43,6 +43,8 @@ INSTALLED_APPS = [
 ]
 
 AUTH_USER_MODEL = "usuarios.Usuario"
+LOGIN_URL = "usuarios:login"
+LOGIN_REDIRECT_URL = "usuarios:dashboard"
 
 AUTH_PASSWORD_VALIDATORS = [
     {

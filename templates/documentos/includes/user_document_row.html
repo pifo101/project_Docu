@@ -1,0 +1,6 @@
+<article class="document-row">
+    <div class="document-icon document-icon--pdf">PDF</div>
+    <div class="document-info"><strong>{{ recipient_document.document.name }}</strong><span>Enviado por {{ recipient_document.sender_name }} · {{ recipient_document.received_at|date:"d/m/Y" }}</span></div>
+    <span class="status status--{{ recipient_document.status_css }}"><i></i>{{ recipient_document.status_label }}</span>
+    <a class="user-row-action" href="{{ recipient_document.detail_url }}">{{ recipient_document.action_label }}</a>
+</article>

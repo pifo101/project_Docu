@@ -119,10 +119,13 @@
                         </a>
                     </nav>
 
-                    <a class="logout-link" href="{% url 'usuarios:login' %}">
+                    <form method="post" action="{% url 'usuarios:logout' %}">
+                        {% csrf_token %}
+                    <button class="logout-link" type="submit">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4v16h6M14 8l4 4-4 4M8 12h10"/></svg>
                         Cerrar sesión
-                    </a>
+                    </button>
+                    </form>
                 </aside>
 
                 <div class="profile-details">

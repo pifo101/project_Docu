@@ -1,8 +1,31 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from usuarios.models import Cargo, Comite
 
-class DocumentsPageTests(TestCase):
+
+class StaffPageMixin:
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        comite = Comite.objects.create(nombre=f"Comité {cls.__name__}")
+        cargo = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.staff_user = get_user_model().objects.create_user(
+            email=f"{cls.__name__.lower()}@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Andrea",
+            last_name="Morales",
+            comite=comite,
+            cargo=cargo,
+            is_staff=True,
+        )
+
+    def setUp(self):
+        self.client.force_login(self.staff_user)
+
+
+class DocumentsPageTests(StaffPageMixin, TestCase):
     def test_documents_page_renders_mock_list_and_controls(self):
         response = self.client.get(reverse("documentos:list"))
 
@@ -53,7 +76,7 @@ class DocumentsPageTests(TestCase):
         self.assertContains(response, "No tienes documentos pendientes de firma")
 
 
-class EditorPageTests(TestCase):
+class EditorPageTests(StaffPageMixin, TestCase):
     def test_editor_page_renders(self):
         response = self.client.get(reverse("documentos:editor"))
 
@@ -75,7 +98,7 @@ class EditorPageTests(TestCase):
         self.assertContains(response, "pdf.min.js")
 
 
-class RecipientExperienceTests(TestCase):
+class RecipientExperienceTests(StaffPageMixin, TestCase):
     def test_request_page_has_simplified_entry(self):
         response = self.client.get(reverse("firmas:request"))
 
@@ -100,3 +123,93 @@ class RecipientExperienceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Documento completado")
         self.assertContains(response, "Tu firma se registró correctamente")
+
+
+class UserDocumentPortalTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        comite = Comite.objects.create(nombre="Comité portal destinatario")
+        cargo = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.user = get_user_model().objects.create_user(
+            email="destinatario@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Bryan",
+            last_name="López",
+            comite=comite,
+            cargo=cargo,
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_authenticated_user_can_open_dashboard(self):
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "documentos/user_dashboard.html")
+        self.assertContains(response, "Hola, Bryan")
+        self.assertContains(response, "No tienes documentos pendientes")
+
+    def test_anonymous_user_is_redirected_from_documents(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("usuarios:login"), response.url)
+
+    def test_portal_does_not_show_mock_documents(self):
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertEqual(response.context["documents"], ())
+        self.assertEqual(response.context["document_count"], 0)
+        self.assertNotContains(response, "Contrato de servicios 2026")
+        self.assertContains(response, "Aún no tienes documentos asignados")
+
+    def test_pending_filter_uses_pending_status(self):
+        response = self.client.get(reverse("documentos:user_pending"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_status"], "pendientes")
+        self.assertContains(response, "No tienes documentos pendientes")
+
+    def test_completed_filter_uses_completed_status(self):
+        response = self.client.get(reverse("documentos:user_completed"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_status"], "completados")
+        self.assertContains(response, "Aún no tienes documentos completados")
+
+    def test_invalid_filter_falls_back_to_all(self):
+        response = self.client.get(
+            reverse("documentos:user_documents"),
+            {"estado": "inventado"},
+        )
+
+        self.assertEqual(response.context["selected_status"], "todos")
+
+    def test_normal_user_cannot_open_sender_pages(self):
+        protected_urls = (
+            "documentos:list",
+            "documentos:pending",
+            "documentos:detail",
+            "documentos:recipients",
+            "documentos:editor",
+            "documentos:review",
+            "firmas:request",
+            "firmas:sign",
+            "firmas:completed",
+        )
+
+        for url_name in protected_urls:
+            with self.subTest(url_name=url_name):
+                self.assertEqual(self.client.get(reverse(url_name)).status_code, 403)
+
+    def test_administrative_page_still_works_for_staff(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+
+        response = self.client.get(reverse("documentos:list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nuevo documento")
