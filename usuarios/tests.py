@@ -7,10 +7,27 @@ from .models import Cargo, Comite
 
 
 class AuthPagesTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        comite = Comite.objects.create(nombre="Comité de páginas")
+        cargo = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.usuario = get_user_model().objects.create_user(
+            email="paginas@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Bryan",
+            last_name="Pérez",
+            comite=comite,
+            cargo=cargo,
+        )
+
     def test_home_redirects_to_dashboard(self):
         response = self.client.get("/")
 
-        self.assertRedirects(response, reverse("usuarios:dashboard"))
+        self.assertRedirects(
+            response,
+            reverse("usuarios:dashboard"),
+            fetch_redirect_response=False,
+        )
 
     def test_login_page_renders(self):
         response = self.client.get(reverse("usuarios:login"))
@@ -25,19 +42,39 @@ class AuthPagesTests(TestCase):
         self.assertContains(response, "Crear cuenta")
 
     def test_dashboard_page_renders(self):
+        self.client.force_login(self.usuario)
         response = self.client.get(reverse("usuarios:dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Buenos días, Andrea")
-        self.assertContains(response, "Documentos recientes")
+        self.assertContains(response, "Hola, Bryan")
+        self.assertContains(response, "Requieren tu atención")
+        self.assertNotContains(response, "Nuevo documento")
 
     def test_profile_page_renders(self):
+        self.client.force_login(self.usuario)
         response = self.client.get(reverse("usuarios:profile"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Mi perfil")
-        self.assertContains(response, "Información personal")
-        self.assertContains(response, "Preferencias")
+        self.assertContains(response, self.usuario.email)
+        self.assertContains(response, self.usuario.comite.nombre)
+
+    def test_anonymous_dashboard_redirects_to_login(self):
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertRedirects(
+            response,
+            f'{reverse("usuarios:login")}?next={reverse("usuarios:dashboard")}',
+        )
+
+    def test_logout_requires_post_and_ends_session(self):
+        self.client.force_login(self.usuario)
+
+        self.assertEqual(self.client.get(reverse("usuarios:logout")).status_code, 405)
+        response = self.client.post(reverse("usuarios:logout"))
+
+        self.assertRedirects(response, reverse("usuarios:login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
 
 
 class RegistroUsuarioTests(TestCase):

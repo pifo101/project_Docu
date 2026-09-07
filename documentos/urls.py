@@ -7,6 +7,19 @@ app_name = "documentos"
 
 urlpatterns = [
     path("", view.documents_view, name="list"),
+    path("mis-documentos/", view.user_documents_view, name="user_documents"),
+    path(
+        "mis-documentos/pendientes/",
+        view.user_documents_view,
+        {"status": "pendientes"},
+        name="user_pending",
+    ),
+    path(
+        "mis-documentos/completados/",
+        view.user_documents_view,
+        {"status": "completados"},
+        name="user_completed",
+    ),
     path("subir/", view.upload_document_view, name="upload"),
     path("<int:pk>/", view.owned_document_detail_view, name="document_detail"),
     path("<int:pk>/descargar/", view.download_document_view, name="download"),

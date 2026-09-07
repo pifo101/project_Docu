@@ -211,13 +211,20 @@
 
 .logout-link {
     display: flex;
+    width: 100%;
     min-height: 48px;
     padding: 0 24px;
     align-items: center;
     gap: 10px;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
     border-top: 1px solid var(--color-border);
     color: #b42318;
+    background: transparent;
+    font: inherit;
     font-size: 11px;
+    cursor: pointer;
 }
 
 .logout-link:hover {

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Inicio | ADICLA Sign{% endblock %}
+{% block body_class %}dashboard-page user-portal-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/documents.css' %}"><link rel="stylesheet" href="{% static 'css/user_portal.css' %}">{% endblock %}
+{% block content %}
+<div class="dashboard-shell">
+    {% include "documentos/includes/user_sidebar.html" with active_section="dashboard" %}
+    <div class="dashboard-main">
+        <header class="dashboard-header">
+            <button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+            <div class="dashboard-header__title"><span class="mobile-logo">ADICLA <strong>Sign</strong></span><p>Tu espacio de documentos</p></div>
+            <a class="user-account-link" href="{% url 'usuarios:profile' %}">Mi cuenta</a>
+        </header>
+        <main class="dashboard-content user-portal-content">
+            <section class="welcome" aria-labelledby="welcome-title">
+                <div><span class="section-eyebrow">Inicio</span><h1 id="welcome-title">Hola, {{ request.user.first_name|default:request.user.email }}.</h1><p>{% if pending_count %}Tienes {{ pending_count }} documento{{ pending_count|pluralize }} que requiere{{ pending_count|pluralize:"n" }} tu atención.{% else %}No tienes documentos pendientes en este momento.{% endif %}</p></div>
+                <a class="text-link" href="{% url 'documentos:user_documents' %}">Ver mis documentos <span aria-hidden="true">→</span></a>
+            </section>
+            <section class="summary-grid" aria-label="Resumen de documentos">
+                <article class="summary-card summary-card--featured"><div class="summary-card__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h4"/></svg></div><div class="summary-card__value"><strong>{{ document_count }}</strong></div><p>Documentos asignados</p><small>Todos tus documentos</small></article>
+                <article class="summary-card"><div class="summary-card__icon summary-card__icon--yellow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2"/></svg></div><div class="summary-card__value"><strong>{{ pending_count }}</strong></div><p>Pendientes</p><small>Requieren tu atención</small></article>
+                <article class="summary-card"><div class="summary-card__icon summary-card__icon--green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></div><div class="summary-card__value"><strong>{{ completed_count }}</strong></div><p>Completados</p><small>Participaciones registradas</small></article>
+            </section>
+            <section class="panel user-attention" aria-labelledby="attention-title">
+                <div class="panel__header"><div><p class="panel__overline">Por hacer</p><h2 id="attention-title">Requieren tu atención</h2></div><a href="{% url 'documentos:user_pending' %}">Ver pendientes <span aria-hidden="true">→</span></a></div>
+                {% if pending_documents %}<div class="document-list">{% for recipient_document in pending_documents %}{% include "documentos/includes/user_document_row.html" %}{% endfor %}</div>{% else %}<div class="user-empty"><span class="user-empty__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></span><h3>Estás al día</h3><p>No hay documentos que requieran tu firma o revisión.</p></div>{% endif %}
+            </section>
+            <section class="panel user-recent" aria-labelledby="recent-title"><div class="panel__header"><div><p class="panel__overline">Actividad</p><h2 id="recent-title">Documentos recientes</h2></div></div>{% if recent_documents %}<div class="document-list">{% for recipient_document in recent_documents %}{% include "documentos/includes/user_document_row.html" %}{% endfor %}</div>{% else %}<p class="user-recent__empty">Tu actividad documental aparecerá aquí cuando recibas una asignación.</p>{% endif %}</section>
+        </main>
+    </div>
+</div>
+<button class="sidebar-backdrop" type="button" aria-label="Cerrar navegación" tabindex="-1"></button>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'js/dashboard.js' %}" defer></script>{% endblock %}

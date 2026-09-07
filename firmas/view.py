@@ -38,7 +38,7 @@ def recipient_sign_view(request, pk):
         destinatario=destinatario
     ).exists():
         messages.info(request, "Ya registraste tu firma para este documento.")
-        return redirect("documentos:pending")
+        return redirect("documentos:user_completed")
 
     if request.method == "GET":
         if destinatario.estado != DestinatarioDocumento.Estado.PENDIENTE:
@@ -63,7 +63,7 @@ def recipient_sign_view(request, pk):
                         destinatario=bloqueado
                     ).exists():
                         messages.info(request, "Ya registraste tu firma para este documento.")
-                        return redirect("documentos:pending")
+                        return redirect("documentos:user_completed")
                     if bloqueado.estado not in (
                         DestinatarioDocumento.Estado.PENDIENTE,
                         DestinatarioDocumento.Estado.VISTO,
@@ -81,10 +81,10 @@ def recipient_sign_view(request, pk):
                         bloqueado.save(update_fields=("estado", "fecha_visualizacion"))
             except IntegrityError:
                 messages.info(request, "Ya registraste tu firma para este documento.")
-                return redirect("documentos:pending")
+                return redirect("documentos:user_completed")
             if not form.errors:
                 messages.success(request, "Tu firma y aceptación se registraron correctamente.")
-                return redirect("documentos:pending")
+                return redirect("documentos:user_completed")
 
     return render(request, "firmas/sign.html", {
         "destinatario": destinatario,

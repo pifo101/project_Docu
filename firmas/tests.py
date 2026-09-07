@@ -135,7 +135,7 @@ class FirmaFlujoTests(TestCase):
         firma = Firma.objects.get()
         self.solicitud.refresh_from_db()
 
-        self.assertRedirects(response, reverse("documentos:pending"))
+        self.assertRedirects(response, reverse("documentos:user_completed"))
         self.assertEqual(firma.destinatario, self.solicitud)
         self.assertTrue(firma.consentimiento)
         self.assertIsNotNone(firma.fecha_firma)
@@ -214,7 +214,10 @@ class FirmaFlujoTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.redirect_chain, [(reverse("documentos:pending"), 302)])
+        self.assertEqual(
+            response.redirect_chain,
+            [(reverse("documentos:user_completed"), 302)],
+        )
         self.assertEqual(Firma.objects.count(), 1)
         self.assertContains(response, "Ya registraste tu firma")
 

@@ -1,0 +1,22 @@
+<aside class="sidebar user-sidebar" id="dashboard-sidebar">
+    <div class="sidebar__top">
+        <a class="brand sidebar__brand" href="{% url 'usuarios:dashboard' %}" aria-label="ADICLA Sign, inicio">
+            <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4h11l5 5v19H8z"/><path d="M19 4v6h5M12 18l3 3 6-7"/></svg></span>
+            <span>ADICLA <strong>Sign</strong></span>
+        </a>
+        <nav class="sidebar__nav" aria-label="Navegación del destinatario">
+            <a class="nav-link{% if active_section == 'dashboard' %} nav-link--active{% endif %}" href="{% url 'usuarios:dashboard' %}"{% if active_section == 'dashboard' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Inicio</a>
+            <a class="nav-link{% if active_section == 'documents' %} nav-link--active{% endif %}" href="{% url 'documentos:user_documents' %}"{% if active_section == 'documents' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg>Mis documentos</a>
+            <a class="nav-link{% if active_section == 'pending' %} nav-link--active{% endif %}" href="{% url 'documentos:user_pending' %}"{% if active_section == 'pending' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2"/></svg>Pendientes{% if pending_count %}<span class="nav-link__count nav-link__count--accent">{{ pending_count }}</span>{% endif %}</a>
+            <a class="nav-link{% if active_section == 'completed' %} nav-link--active{% endif %}" href="{% url 'documentos:user_completed' %}"{% if active_section == 'completed' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Completados</a>
+        </nav>
+    </div>
+    <div class="sidebar__bottom">
+        <a class="profile-chip" href="{% url 'usuarios:profile' %}">
+            <span class="profile-chip__avatar">{{ request.user.first_name|first|default:"U" }}{{ request.user.last_name|first }}</span>
+            <span class="profile-chip__copy"><strong>{{ request.user.get_full_name|default:request.user.email }}</strong><small>Destinatario</small></span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <form class="user-sidebar__logout" method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button type="submit">Cerrar sesión</button></form>
+    </div>
+</aside>

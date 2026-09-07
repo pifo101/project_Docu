@@ -12,6 +12,7 @@ from usuarios.models import Cargo
 
 from .forms import DocumentoForm
 from .models import DestinatarioDocumento, Documento, EnvioDocumento
+from .services import recipient_documents_context
 
 
 def _documento_de_presidente(request, pk):
@@ -171,3 +172,10 @@ def pending_view(request):
         .select_related("envio__documento", "envio__remitente")
     )
     return render(request, "documentos/pending.html", {"destinatarios": destinatarios})
+
+
+@login_required
+def user_documents_view(request, status=None):
+    selected_status = status or request.GET.get("estado", "todos")
+    context = recipient_documents_context(request.user, selected_status)
+    return render(request, "documentos/user_documents.html", context)

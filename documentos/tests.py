@@ -41,6 +41,15 @@ class DocumentsPageTests(TestCase):
             )
 
     def test_dashboard_links_to_documents_page(self):
+        comite = Comite.objects.create(nombre="Comité dashboard documental")
+        presidente = get_user_model().objects.create_user(
+            email="dashboard-documental@adicla.org.gt",
+            password="ClaveSegura!2026",
+            comite=comite,
+            cargo=Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE),
+        )
+        self.client.force_login(presidente)
+
         response = self.client.get(reverse("usuarios:dashboard"))
 
         self.assertContains(response, f'href="{reverse("documentos:list")}"', count=2)
@@ -404,3 +413,156 @@ class RecipientExperienceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Documento completado")
         self.assertContains(response, "Tu firma se registró correctamente")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class UserDocumentPortalTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        comite = Comite.objects.create(nombre="Comité portal destinatario")
+        otro_comite = Comite.objects.create(nombre="Comité portal externo")
+        cargo = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        cls.user = get_user_model().objects.create_user(
+            email="destinatario@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Bryan",
+            last_name="López",
+            comite=comite,
+            cargo=cargo,
+        )
+        cls.other_user = get_user_model().objects.create_user(
+            email="otro-destinatario@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Otro",
+            last_name="Usuario",
+            comite=otro_comite,
+            cargo=cargo,
+        )
+        cls.sender = get_user_model().objects.create_user(
+            email="remitente-portal@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Ana",
+            last_name="Remitente",
+            comite=comite,
+            cargo=presidente,
+        )
+        cls.pending = cls.create_recipient("Pendiente real.pdf", cls.user)
+        cls.viewed = cls.create_recipient(
+            "Documento visto.pdf",
+            cls.user,
+            DestinatarioDocumento.Estado.VISTO,
+        )
+        cls.completed = cls.create_recipient(
+            "Documento firmado.pdf",
+            cls.user,
+            DestinatarioDocumento.Estado.FIRMADO,
+        )
+        cls.foreign = cls.create_recipient("Documento ajeno.pdf", cls.other_user)
+
+    @classmethod
+    def create_recipient(cls, name, user, status=DestinatarioDocumento.Estado.PENDIENTE):
+        document = Documento.objects.create(
+            propietario=cls.sender,
+            archivo=SimpleUploadedFile(name, b"%PDF-1.7\nportal"),
+            nombre_original=name,
+        )
+        shipment = EnvioDocumento.objects.create(
+            documento=document,
+            remitente=cls.sender,
+        )
+        return DestinatarioDocumento.objects.create(
+            envio=shipment,
+            usuario=user,
+            estado=status,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_authenticated_user_can_open_dashboard(self):
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "documentos/user_dashboard.html")
+        self.assertContains(response, "Hola, Bryan")
+        self.assertEqual(response.context["document_count"], 3)
+        self.assertEqual(response.context["pending_count"], 2)
+        self.assertEqual(response.context["completed_count"], 1)
+        self.assertContains(response, "Pendiente real.pdf")
+        self.assertContains(response, "Documento visto.pdf")
+        self.assertNotContains(response, "Documento ajeno.pdf")
+
+    def test_anonymous_user_is_redirected_from_documents(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("usuarios:login"), response.url)
+
+    def test_portal_only_shows_documents_assigned_to_user(self):
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertEqual(response.context["document_count"], 3)
+        self.assertContains(response, "Pendiente real.pdf")
+        self.assertContains(response, "Documento visto.pdf")
+        self.assertContains(response, "Documento firmado.pdf")
+        self.assertNotContains(response, "Documento ajeno.pdf")
+
+    def test_pending_filter_uses_pending_status(self):
+        response = self.client.get(reverse("documentos:user_pending"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_status"], "pendientes")
+        self.assertContains(response, "Pendiente real.pdf")
+        self.assertContains(response, "Documento visto.pdf")
+        self.assertNotContains(response, "Documento firmado.pdf")
+
+    def test_completed_filter_uses_completed_status(self):
+        response = self.client.get(reverse("documentos:user_completed"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_status"], "completados")
+        self.assertContains(response, "Documento firmado.pdf")
+        self.assertNotContains(response, "Pendiente real.pdf")
+        self.assertNotContains(response, "Documento visto.pdf")
+
+    def test_invalid_filter_falls_back_to_all(self):
+        response = self.client.get(
+            reverse("documentos:user_documents"),
+            {"estado": "inventado"},
+        )
+
+        self.assertEqual(response.context["selected_status"], "todos")
+
+    def test_rows_use_real_review_and_view_endpoints(self):
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertContains(
+            response,
+            reverse("firmas:recipient_sign", args=[self.pending.pk]),
+        )
+        self.assertContains(
+            response,
+            reverse("documentos:received_document", args=[self.completed.pk]),
+        )
+
+    def test_user_with_sender_role_can_also_open_recipient_portal(self):
+        self.client.force_login(self.sender)
+
+        response = self.client.get(reverse("documentos:user_documents"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_sender_dashboard_and_document_flow_still_work(self):
+        self.client.force_login(self.sender)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nuevo documento")
