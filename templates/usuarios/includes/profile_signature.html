@@ -1,0 +1,28 @@
+<section class="profile-panel compact-panel profile-signature-panel" id="firma" aria-labelledby="profile-signature-title">
+    <div class="compact-panel__heading">
+        <span class="compact-panel__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c4-7 3 4 7-3 3-5 0 6 5 1 2-2 3 1 6-2M3 21h18"/></svg></span>
+        <div><p class="panel__overline">Identidad electrónica</p><h2 id="profile-signature-title">Mi firma guardada</h2></div>
+    </div>
+    {% if messages %}{% for message in messages %}<p class="profile-signature-message" role="status">{{ message }}</p>{% endfor %}{% endif %}
+    <div class="signature-preview" data-profile-signature-preview>
+        {% if firma_perfil %}
+        <img src="{% url 'firmas:profile_preview' %}" alt="Firma guardada de {{ request.user.get_full_name|default:request.user.email }}">
+        <span>Actualizada {{ firma_perfil.fecha_actualizacion|date:"j M Y, H:i" }}</span>
+        {% else %}
+        <p data-profile-signature-empty>No tienes una firma guardada.</p>
+        {% endif %}
+    </div>
+    <form method="post" action="{% url 'firmas:profile_save' %}" enctype="multipart/form-data" data-profile-signature-form>
+        {% csrf_token %}
+        <label class="outline-button signature-upload-label" for="profile-signature-file">{% if firma_perfil %}Reemplazar firma{% else %}Subir firma{% endif %}</label>
+        <input id="profile-signature-file" name="imagen" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" required data-profile-signature-file>
+        <small data-profile-signature-filename>PNG, JPG o JPEG. Máximo {{ firma_perfil_max_file_size|filesizeformat }}.</small>
+        <button class="save-profile-button" type="submit">Guardar firma</button>
+    </form>
+    {% if firma_perfil %}
+    <form method="post" action="{% url 'firmas:profile_delete' %}" class="profile-signature-delete">
+        {% csrf_token %}
+        <button type="submit">Eliminar firma guardada</button>
+    </form>
+    {% endif %}
+</section>
