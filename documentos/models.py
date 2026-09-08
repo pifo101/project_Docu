@@ -1,6 +1,9 @@
 import hashlib
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
@@ -45,6 +48,7 @@ class Documento(models.Model):
 
 class EnvioDocumento(models.Model):
     class Estado(models.TextChoices):
+        PREPARACION = "PREPARACION", "En preparación"
         ENVIADO = "ENVIADO", "Enviado"
 
     documento = models.OneToOneField(
@@ -75,6 +79,7 @@ class EnvioDocumento(models.Model):
 
 class DestinatarioDocumento(models.Model):
     class Estado(models.TextChoices):
+        BORRADOR = "BORRADOR", "Borrador"
         PENDIENTE = "PENDIENTE", "Pendiente"
         VISTO = "VISTO", "Visto"
         FIRMADO = "FIRMADO", "Firmado"
@@ -110,3 +115,77 @@ class DestinatarioDocumento(models.Model):
 
     def __str__(self):
         return f"{self.usuario} - {self.envio.documento}"
+
+
+class CampoFirma(models.Model):
+    destinatario = models.ForeignKey(
+        DestinatarioDocumento,
+        on_delete=models.CASCADE,
+        related_name="campos_firma",
+    )
+    pagina = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    x = models.DecimalField(
+        max_digits=7,
+        decimal_places=6,
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
+    y = models.DecimalField(
+        max_digits=7,
+        decimal_places=6,
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("1"))],
+    )
+    ancho = models.DecimalField(
+        max_digits=7,
+        decimal_places=6,
+        validators=[MinValueValidator(Decimal("0.000001")), MaxValueValidator(Decimal("1"))],
+    )
+    alto = models.DecimalField(
+        max_digits=7,
+        decimal_places=6,
+        validators=[MinValueValidator(Decimal("0.000001")), MaxValueValidator(Decimal("1"))],
+    )
+
+    class Meta:
+        ordering = ("pagina", "id")
+        verbose_name = "campo de firma"
+        verbose_name_plural = "campos de firma"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("destinatario",),
+                name="campo_firma_unico_por_destinatario",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(x__gte=0, x__lte=1, y__gte=0, y__lte=1),
+                name="campo_firma_posicion_normalizada",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ancho__gt=0, ancho__lte=1, alto__gt=0, alto__lte=1),
+                name="campo_firma_dimension_normalizada",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(pagina__gte=1),
+                name="campo_firma_pagina_positiva",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(x__lte=1 - models.F("ancho")),
+                name="campo_firma_dentro_ancho_pagina",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(y__lte=1 - models.F("alto")),
+                name="campo_firma_dentro_alto_pagina",
+            ),
+        ]
+
+    @property
+    def documento(self):
+        return self.destinatario.envio.documento
+
+    def clean(self):
+        super().clean()
+        if self.x is not None and self.ancho is not None and self.x + self.ancho > 1:
+            raise ValidationError({"ancho": "El campo excede el ancho de la página."})
+        if self.y is not None and self.alto is not None and self.y + self.alto > 1:
+            raise ValidationError({"alto": "El campo excede el alto de la página."})
+
+    def __str__(self):
+        return f"Firma para {self.destinatario.usuario} en página {self.pagina}"

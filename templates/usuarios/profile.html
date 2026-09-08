@@ -154,17 +154,7 @@
                     </form>
 
                     <div class="profile-secondary-grid">
-                        <section class="profile-panel compact-panel" id="firma" aria-labelledby="signature-title">
-                            <div class="compact-panel__heading">
-                                <span class="compact-panel__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c4-7 3 4 7-3 3-5 0 6 5 1 2-2 3 1 6-2M3 21h18"/></svg></span>
-                                <div><p class="panel__overline">Identidad digital</p><h2 id="signature-title">Mi firma</h2></div>
-                            </div>
-                            <div class="signature-preview">
-                                <svg viewBox="0 0 220 70" aria-label="Firma de Andrea Morales"><path d="M8 53c25-47 18 19 46-23 16-25-2 37 25 6 13-15 9 15 31 7 22-8 38-29 58-27 13 1-3 22 21 16 8-2 15-5 23-10"/></svg>
-                                <span>Andrea Morales</span>
-                            </div>
-                            <button class="outline-button" type="button">Actualizar firma</button>
-                        </section>
+                        {% include "usuarios/includes/profile_signature.html" %}
 
                         <section class="profile-panel compact-panel" id="organizacion" aria-labelledby="organization-title">
                             <div class="compact-panel__heading">

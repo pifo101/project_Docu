@@ -8,6 +8,7 @@ const documentStatus = document.querySelector("[data-document-status]");
 const viewer = document.querySelector(".pdf-viewer");
 const fieldTools = [...document.querySelectorAll("[data-field-type]")];
 const continueButton = document.querySelector("[data-editor-continue]");
+const saveButton = document.querySelector("[data-editor-save]");
 const editorFeedback = document.querySelector("[data-editor-feedback]");
 const propertiesEmpty = document.querySelector("[data-properties-empty]");
 const propertiesContent = document.querySelector("[data-properties-content]");
@@ -16,11 +17,17 @@ const propertyRequired = document.querySelector("[data-property-required]");
 const textProperty = document.querySelector("[data-text-property]");
 const propertyLabel = document.querySelector("[data-property-label]");
 const propertyDelete = document.querySelector("[data-property-delete]");
+const editorShell = document.querySelector("[data-editor-backend]");
 const recipientNameElement = document.querySelector("[data-recipient-name]");
 const recipientEmailElement = document.querySelector("[data-recipient-email]");
 const recipientInitialsElement = document.querySelector("[data-recipient-initials]");
 const propertyRecipient = document.querySelector("[data-property-recipient]");
+const propertyRecipientLabel = document.querySelector("[data-property-recipient-label]");
 const documentFields = [];
+const backendEditor = Boolean(editorShell);
+const backendRecipients = backendEditor
+    ? JSON.parse(document.getElementById("editor-recipients")?.textContent || "[]")
+    : [];
 const FIELD_TYPES = {
     signature: {
         label: "Firma",
@@ -91,9 +98,12 @@ let recipient = { name: "Destinatarios seleccionados", email: "Información temp
 let hasStoredRecipient = false;
 
 try {
+    if (backendRecipients.length) {
+        recipient = { ...backendRecipients[0], count: backendRecipients.length };
+    }
     const storedRecipient = JSON.parse(localStorage.getItem("adicla-sign-recipient")) || {};
-    hasStoredRecipient = Boolean(storedRecipient.name);
-    recipient = { ...recipient, ...storedRecipient };
+    hasStoredRecipient = !backendEditor && Boolean(storedRecipient.name);
+    if (!backendEditor) recipient = { ...recipient, ...storedRecipient };
 } catch (error) {
     console.warn("No se pudo leer el destinatario temporal.", error);
 }
@@ -104,10 +114,32 @@ function recipientInitials(name) {
 }
 
 function updateRecipientPresentation() {
-    if (recipientNameElement) recipientNameElement.textContent = recipient.name;
-    if (recipientEmailElement) recipientEmailElement.textContent = recipient.email;
+    if (recipientNameElement) recipientNameElement.textContent = backendEditor ? `${recipient.count} destinatario${recipient.count === 1 ? "" : "s"}` : recipient.name;
+    if (recipientEmailElement) recipientEmailElement.textContent = backendEditor ? "Asigna cada firma a una persona" : recipient.email;
     if (recipientInitialsElement) recipientInitialsElement.textContent = recipientInitials(recipient.name);
-    if (propertyRecipient) propertyRecipient.textContent = recipient.name;
+    if (propertyRecipientLabel) propertyRecipientLabel.textContent = recipient.name;
+}
+
+function recipientById(recipientId) {
+    return backendRecipients.find((item) => item.id === Number(recipientId));
+}
+
+function recipientsWithoutSignatureField() {
+    return backendRecipients.filter((item) => !documentFields.some(
+        (field) => field.type === "signature" && field.recipient_id === item.id,
+    ));
+}
+
+function updateBackendFieldTools() {
+    if (!backendEditor || !loadedPdf) return;
+    const missingRecipients = recipientsWithoutSignatureField();
+    fieldTools.forEach((tool) => {
+        tool.disabled = tool.dataset.fieldType !== "signature" || missingRecipients.length === 0;
+    });
+}
+
+function sameFieldId(field, fieldId) {
+    return String(field.id) === String(fieldId);
 }
 
 function clamp(value, minimum, maximum) {
@@ -131,9 +163,9 @@ function getNormalizedFieldData(fieldElement) {
     const y = roundNormalized(parseFloat(fieldElement.style.top) / layerHeight);
     const width = parseFloat(fieldElement.style.width) / layerWidth;
     const height = parseFloat(fieldElement.style.height) / layerHeight;
-    const existingField = documentFields.find((field) => field.id === fieldElement.dataset.id);
+    const existingField = documentFields.find((field) => sameFieldId(field, fieldElement.dataset.id));
     const normalizedField = {
-        id: fieldElement.dataset.id,
+        id: existingField?.id ?? fieldElement.dataset.id,
         type: fieldElement.dataset.type,
         page: Number(layer.dataset.page),
         x,
@@ -141,7 +173,8 @@ function getNormalizedFieldData(fieldElement) {
         width: roundNormalized(Math.min(width, 1 - x)),
         height: roundNormalized(Math.min(height, 1 - y)),
         required: existingField?.required ?? fieldElement.dataset.required !== "false",
-        recipient: recipient.name,
+        recipient_id: existingField?.recipient_id ?? recipient.id,
+        recipient_name: existingField?.recipient_name ?? recipient.name,
     };
 
     if (normalizedField.type === "text") {
@@ -152,7 +185,7 @@ function getNormalizedFieldData(fieldElement) {
 
 function updateFieldState(fieldElement) {
     const normalizedField = getNormalizedFieldData(fieldElement);
-    const fieldIndex = documentFields.findIndex((field) => field.id === normalizedField.id);
+    const fieldIndex = documentFields.findIndex((field) => sameFieldId(field, normalizedField.id));
 
     if (fieldIndex >= 0) documentFields[fieldIndex] = normalizedField;
     return normalizedField;
@@ -168,7 +201,7 @@ function setFieldPixels(fieldElement, left, top, width, height) {
 function normalizeTextLabel(fieldElement) {
     if (!fieldElement || fieldElement.dataset.type !== "text") return;
 
-    const fieldData = documentFields.find((field) => field.id === fieldElement.dataset.id);
+    const fieldData = documentFields.find((field) => sameFieldId(field, fieldElement.dataset.id));
     if (!fieldData) return;
 
     fieldData.label = fieldData.label.trim() || FIELD_TYPES.text.defaultLabel;
@@ -190,10 +223,11 @@ function removeField(fieldElement) {
     if (!fieldElement) return;
 
     if (activeInteraction?.fieldElement === fieldElement) cancelActiveInteraction();
-    const fieldIndex = documentFields.findIndex((field) => field.id === fieldElement.dataset.id);
+    const fieldIndex = documentFields.findIndex((field) => sameFieldId(field, fieldElement.dataset.id));
     if (fieldIndex >= 0) documentFields.splice(fieldIndex, 1);
     if (selectedField === fieldElement) setSelectedField(null);
     fieldElement.remove();
+    updateBackendFieldTools();
 }
 
 function fieldMarkup(fieldData) {
@@ -216,7 +250,7 @@ function updateFieldPresentation(fieldElement, fieldData) {
     if (fieldData.type === "text") fieldElement.dataset.label = fieldData.label;
     fieldElement.querySelector(".document-field__label strong").textContent = visibleLabel;
     fieldElement.querySelector(".document-field__label small").textContent =
-        `${fieldData.recipient || recipient.name} · ${fieldData.required ? "Obligatorio" : "Opcional"}`;
+        `${fieldData.recipient_name || fieldData.recipient || recipient.name} · ${fieldData.required ? "Obligatorio" : "Opcional"}`;
     fieldElement.setAttribute("aria-label", `${visibleLabel} en página ${fieldData.page}`);
 }
 
@@ -255,6 +289,13 @@ function renderFieldsForLayer(layer) {
 
 function createDocumentField(type, layer, clientX, clientY) {
     const config = FIELD_TYPES[type];
+    const fieldRecipient = backendEditor && type === "signature"
+        ? recipientsWithoutSignatureField()[0]
+        : recipient;
+    if (!fieldRecipient) {
+        showEditorFeedback("Todos los destinatarios ya tienen un campo de firma.");
+        return;
+    }
     const layerRect = layer.getBoundingClientRect();
     const width = Math.min(config.width, layerRect.width);
     const height = Math.min(config.height, layerRect.height);
@@ -269,7 +310,8 @@ function createDocumentField(type, layer, clientX, clientY) {
         width: 0,
         height: 0,
         required: true,
-        recipient: recipient.name,
+        recipient_id: fieldRecipient.id,
+        recipient_name: fieldRecipient.name,
     };
     if (type === "text") fieldData.label = config.defaultLabel;
     const fieldElement = createFieldElement(fieldData, layer);
@@ -280,6 +322,7 @@ function createDocumentField(type, layer, clientX, clientY) {
     setSelectedField(fieldElement);
     fieldElement.focus({ preventScroll: true });
     hideEditorFeedback();
+    updateBackendFieldTools();
 }
 
 function getFieldPixels(fieldElement) {
@@ -487,7 +530,7 @@ function cancelActiveInteraction() {
 
 function updatePropertiesPanel() {
     const fieldData = selectedField
-        ? documentFields.find((field) => field.id === selectedField.dataset.id)
+        ? documentFields.find((field) => sameFieldId(field, selectedField.dataset.id))
         : null;
 
     propertiesEmpty.hidden = Boolean(fieldData);
@@ -496,6 +539,7 @@ function updatePropertiesPanel() {
 
     propertyType.textContent = FIELD_TYPES[fieldData.type].label;
     propertyRequired.checked = fieldData.required;
+    if (backendEditor && propertyRecipient) propertyRecipient.value = String(fieldData.recipient_id);
     textProperty.hidden = fieldData.type !== "text";
     propertyLabel.value = fieldData.type === "text" ? fieldData.label : "";
 }
@@ -503,7 +547,7 @@ function updatePropertiesPanel() {
 function updateSelectedProperty(property, value) {
     if (!selectedField) return;
 
-    const fieldData = documentFields.find((field) => field.id === selectedField.dataset.id);
+    const fieldData = documentFields.find((field) => sameFieldId(field, selectedField.dataset.id));
     if (!fieldData) return;
 
     fieldData[property] = value;
@@ -564,6 +608,39 @@ function readTemporaryDocument() {
 }
 
 function storeDocumentForReview() {
+    if (backendEditor) {
+        const previousIds = documentFields.map((field) => String(field.id));
+        return fetch(editorShell.dataset.fieldsUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": editorShell.dataset.csrfToken,
+            },
+            body: JSON.stringify({
+                fields: documentFields.map((field) => ({
+                    id: Number.isInteger(field.id) ? field.id : null,
+                    type: field.type,
+                    page: field.page,
+                    x: field.x,
+                    y: field.y,
+                    width: field.width,
+                    height: field.height,
+                    recipient_id: field.recipient_id,
+                })),
+            }),
+        }).then(async (response) => {
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "No se pudieron guardar los campos.");
+            const renderedFields = [...document.querySelectorAll(".document-field")];
+            previousIds.forEach((fieldId, index) => {
+                const fieldElement = renderedFields.find((element) => element.dataset.id === fieldId);
+                if (fieldElement && result.fields[index]) fieldElement.dataset.id = String(result.fields[index].id);
+            });
+            documentFields.splice(0, documentFields.length, ...result.fields.map((field) => ({ ...field, required: true })));
+        });
+    }
+
     return new Promise((resolve, reject) => {
         const openRequest = indexedDB.open(databaseName, 1);
         openRequest.addEventListener("error", () => reject(openRequest.error));
@@ -589,6 +666,7 @@ async function renderPages() {
     setSelectedField(null);
     fieldTools.forEach((tool) => { tool.disabled = true; });
     continueButton.disabled = true;
+    if (saveButton) saveButton.disabled = true;
     const currentVersion = ++renderVersion;
     const availableWidth = Math.max(240, pdfDocumentElement.clientWidth);
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -636,14 +714,37 @@ async function renderPages() {
     if (currentVersion !== renderVersion) return;
     viewerState.hidden = true;
     documentStatus.textContent = "Documento listo";
-    fieldTools.forEach((tool) => { tool.disabled = false; });
+    if (backendEditor) updateBackendFieldTools();
+    else fieldTools.forEach((tool) => { tool.disabled = false; });
     continueButton.disabled = false;
+    if (saveButton) saveButton.disabled = false;
 }
 
 async function prepareEditor() {
     showState("Preparando documento...");
 
     try {
+        if (backendEditor) {
+            const fieldsResponse = await fetch(editorShell.dataset.fieldsUrl, {
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" },
+            });
+            if (!fieldsResponse.ok) throw new Error("No se pudieron recuperar los campos guardados.");
+            const storedFields = await fieldsResponse.json();
+            documentFields.splice(
+                0,
+                documentFields.length,
+                ...storedFields.fields.map((field) => ({ ...field, required: true })),
+            );
+            updateRecipientPresentation();
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            loadedPdf = await window.pdfjsLib.getDocument(editorShell.dataset.pdfUrl).promise;
+            pdfDocumentElement.hidden = false;
+            await renderPages();
+            return;
+        }
+
         temporaryDocument = await readTemporaryDocument();
         if (!temporaryDocument?.file) {
             documentStatus.textContent = "Sin documento";
@@ -716,6 +817,24 @@ document.addEventListener("keydown", (event) => {
 propertyRequired?.addEventListener("change", () => {
     updateSelectedProperty("required", propertyRequired.checked);
 });
+propertyRecipient?.addEventListener("change", () => {
+    const selectedRecipient = recipientById(propertyRecipient.value);
+    if (!selectedRecipient) return;
+    const assignedToAnotherField = documentFields.some((field) => (
+        field.type === "signature"
+        && field.recipient_id === selectedRecipient.id
+        && !sameFieldId(field, selectedField?.dataset.id)
+    ));
+    if (assignedToAnotherField) {
+        const currentField = documentFields.find((field) => sameFieldId(field, selectedField?.dataset.id));
+        propertyRecipient.value = String(currentField.recipient_id);
+        showEditorFeedback(`${selectedRecipient.name} ya tiene un campo de firma.`);
+        return;
+    }
+    updateSelectedProperty("recipient_id", selectedRecipient.id);
+    updateSelectedProperty("recipient_name", selectedRecipient.name);
+    updateBackendFieldTools();
+});
 propertyLabel?.addEventListener("input", () => {
     updateSelectedProperty("label", propertyLabel.value.slice(0, 60));
 });
@@ -723,8 +842,28 @@ propertyLabel?.addEventListener("blur", () => {
     normalizeTextLabel(selectedField);
 });
 propertyDelete?.addEventListener("click", () => removeField(selectedField));
+saveButton?.addEventListener("click", async () => {
+    hideEditorFeedback();
+    saveButton.disabled = true;
+    saveButton.textContent = "Guardando...";
+    try {
+        await storeDocumentForReview();
+        showEditorFeedback("Los cambios se guardaron correctamente.");
+    } catch (error) {
+        console.error("No se pudieron guardar los campos.", error);
+        showEditorFeedback(error.message || "No se pudieron guardar los cambios.");
+    } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = "Guardar cambios";
+    }
+});
 continueButton?.addEventListener("click", async () => {
-    if (documentFields.length === 0) {
+    const missingRecipients = backendEditor ? recipientsWithoutSignatureField() : [];
+    if (backendEditor && missingRecipients.length) {
+        showEditorFeedback(`Falta un campo de firma para: ${missingRecipients.map((item) => item.name).join(", ")}.`);
+        return;
+    }
+    if (!backendEditor && documentFields.length === 0) {
         showEditorFeedback("Agrega al menos un campo al documento para continuar.");
         return;
     }
@@ -737,7 +876,7 @@ continueButton?.addEventListener("click", async () => {
         window.location.assign(continueButton.dataset.reviewUrl);
     } catch (error) {
         console.error("No se pudo preparar la revisión.", error);
-        showEditorFeedback("No se pudo preparar la revisión. Inténtalo nuevamente.");
+        showEditorFeedback(error.message || "No se pudo preparar la revisión. Inténtalo nuevamente.");
         continueButton.disabled = false;
         continueButton.textContent = "Continuar";
     }
@@ -754,7 +893,7 @@ window.addEventListener("beforeunload", () => {
     if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
 });
 
-if (!window.indexedDB || !window.pdfjsLib) {
+if ((!backendEditor && !window.indexedDB) || !window.pdfjsLib) {
     documentStatus.textContent = "Error al preparar";
     showState("No se pudo cargar el documento.", "error");
 } else {

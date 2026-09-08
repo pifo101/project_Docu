@@ -10,6 +10,9 @@
     const signatureCanvas = document.querySelector("[data-signature-canvas]");
     const signatureError = document.querySelector("[data-signature-error]");
     const signatureInput = document.querySelector("[data-signature-input]");
+    const signatureMethod = document.querySelector("[data-signature-method]");
+    const signatureTabs = Array.from(document.querySelectorAll("[data-signature-tab]"));
+    const nextHelp = document.querySelector("[data-next-help]");
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
@@ -72,7 +75,7 @@
             guide?.classList.toggle("field-complete", field.classList.contains("field-complete"));
         });
         if (consentPanel) consentPanel.hidden = completed !== fields.length;
-        if (completed === fields.length) consentPanel?.querySelector("input")?.focus({ preventScroll: true });
+        if (completed === fields.length) consentCheckbox?.focus({ preventScroll: true });
     }
 
     function completeSimpleField(field) {
@@ -86,6 +89,7 @@
     function configureSignatureCanvas() {
         if (!signatureCanvas) return;
         const rect = signatureCanvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
         signatureCanvas.width = Math.max(1, rect.width * ratio);
         signatureCanvas.height = Math.max(1, rect.height * ratio);
@@ -103,11 +107,45 @@
         return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
 
+    function selectSignatureMethod(method) {
+        signatureTabs.forEach((tab) => {
+            const selected = tab.dataset.signatureTab === method;
+            tab.classList.toggle("signature-tab--active", selected);
+            tab.setAttribute("aria-selected", String(selected));
+        });
+        document.querySelectorAll("[data-signature-panel]").forEach((panel) => {
+            panel.hidden = panel.dataset.signaturePanel !== method;
+        });
+        if (signatureError) signatureError.textContent = "";
+        if (method === "DIBUJADA") window.requestAnimationFrame(configureSignatureCanvas);
+    }
+
+    function applySignature(source, method, alt) {
+        const signatureField = document.querySelector('[data-completable="signature"]');
+        const image = document.createElement("img");
+        image.src = source;
+        image.alt = alt;
+        if (signatureMethod) signatureMethod.value = method;
+        if (signatureInput) signatureInput.value = method === "DIBUJADA" ? source : "";
+        if (consentCheckbox) consentCheckbox.checked = false;
+        if (finalizeButton) finalizeButton.disabled = true;
+        if (nextHelp) nextHelp.textContent = method === "PERFIL" ? "Firma guardada seleccionada. Confirma tu aceptación." : "Firma dibujada preparada. Confirma tu aceptación.";
+        signatureField.querySelector("[data-field-value], img")?.replaceWith(image);
+        signatureField.classList.add("field-complete");
+        signatureDialog.close();
+        updateProgress();
+    }
+
+    signatureTabs.forEach((tab) => {
+        tab.addEventListener("click", () => selectSignatureMethod(tab.dataset.signatureTab));
+    });
+
     fields.forEach((field) => {
         field.addEventListener("click", () => {
             if (field.dataset.completable === "signature") {
                 signatureDialog?.showModal();
-                window.requestAnimationFrame(configureSignatureCanvas);
+                const selected = document.querySelector("[data-signature-tab].signature-tab--active");
+                if (selected?.dataset.signatureTab === "DIBUJADA") window.requestAnimationFrame(configureSignatureCanvas);
                 return;
             }
             completeSimpleField(field);
@@ -152,15 +190,10 @@
             signatureError.textContent = "Dibuja tu firma antes de continuar.";
             return;
         }
-        const signatureField = document.querySelector('[data-completable="signature"]');
-        const image = document.createElement("img");
-        image.src = signatureCanvas.toDataURL("image/png");
-        if (signatureInput) signatureInput.value = image.src;
-        image.alt = "Firma dibujada";
-        signatureField.querySelector("[data-field-value], img")?.replaceWith(image);
-        signatureField.classList.add("field-complete");
-        signatureDialog.close();
-        updateProgress();
+        applySignature(signatureCanvas.toDataURL("image/png"), "DIBUJADA", "Firma dibujada");
+    });
+    document.querySelector("[data-saved-signature-use]")?.addEventListener("click", (event) => {
+        applySignature(event.currentTarget.dataset.savedSignatureUrl, "PERFIL", "Firma guardada");
     });
 
     consentCheckbox?.addEventListener("change", () => { finalizeButton.disabled = !consentCheckbox.checked; });
