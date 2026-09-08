@@ -50,9 +50,11 @@
 .signing-guide .recipient-secondary { width: 100%; color: #b42318; }
 .recipient-viewer { min-width: 0; padding: 24px clamp(20px, 6vw, 80px) 48px; overflow: auto; background: #e9edf5; }
 .recipient-viewer__toolbar { display: flex; width: min(720px,100%); margin: 0 auto 12px; justify-content: space-between; color: #667085; font-size: 9px; }
-.recipient-document-page { position: relative; width: min(720px,100%); aspect-ratio: 1 / 1.294; margin: 0 auto; overflow: hidden; background: white; box-shadow: 0 16px 45px rgba(16,24,40,.15); }
-.recipient-document-page > canvas { display: block; width: 100%; height: 100%; }
-.recipient-field { position: absolute; display: grid; padding: 8px 10px; border: 2px solid var(--color-primary); border-radius: 7px; color: var(--color-dark-blue); background: rgba(239,244,255,.96); box-shadow: 0 5px 15px rgba(14,67,240,.18); text-align: left; cursor: pointer; }
+.recipient-document { display: grid; width: min(720px,100%); margin: 0 auto; justify-items: center; gap: 24px; }
+.recipient-document-page { position: relative; max-width: 100%; overflow: hidden; background: white; box-shadow: 0 16px 45px rgba(16,24,40,.15); }
+.recipient-pdf-canvas { display: block; width: 100%; height: 100%; }
+.recipient-page-number { position: absolute; top: 8px; left: 8px; padding: 4px 7px; border-radius: 99px; color: #475467; background: rgba(255,255,255,.9); box-shadow: 0 1px 4px rgba(16,24,40,.12); font-size: 8px; pointer-events: none; }
+.recipient-field { position: absolute; display: grid; box-sizing: border-box; padding: 8px 10px; border: 2px solid var(--color-primary); border-radius: 7px; color: var(--color-dark-blue); background: rgba(239,244,255,.96); box-shadow: 0 5px 15px rgba(14,67,240,.18); text-align: left; cursor: pointer; }
 .recipient-field:hover, .recipient-field:focus-visible { outline: 3px solid rgba(14,67,240,.2); outline-offset: 2px; }
 .recipient-field small { color: #667085; font-size: 7px; font-weight: 700; text-transform: uppercase; }
 .recipient-field strong { font-size: 9px; }
@@ -60,7 +62,7 @@
 .recipient-field--date { width: 25%; right: 12%; top: 42%; }
 .recipient-field--checkbox { display: flex; width: 42%; left: 13%; top: 61%; align-items: center; gap: 7px; font-size: 8px; }
 .recipient-field--checkbox i { width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--color-primary); border-radius: 3px; background: white; }
-.recipient-field--signature { width: 38%; right: 12%; bottom: 16%; min-height: 62px; }
+.recipient-field--signature { overflow: hidden; }
 .recipient-field.field-complete { border-color: #12b76a; background: rgba(236,253,243,.97); }
 .recipient-field--checkbox.field-complete i { display: grid; place-items: center; color: white; background: #12b76a; }
 .recipient-field--checkbox.field-complete i::after { content: "✓"; font-size: 9px; }
@@ -114,5 +116,5 @@
 .completed-feedback { min-height: 17px; margin: 10px 0 0 !important; color: #175cd3 !important; font-size: 9px !important; }
 @media (max-width: 760px) { .signing-header { grid-template-columns: auto minmax(0,1fr) 100px; padding: 0 14px; } .signing-header .brand > span:last-child { display: none; } .signing-document { justify-self: start; text-align: left; } .signing-main { display: block; } .signing-guide { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--color-border); } .signing-guide > .section-label, .signing-guide h1, .signing-guide > p, .signing-guide .recipient-secondary { display: none; } .signing-guide ol { grid-template-columns: repeat(4,1fr); margin: 0; gap: 5px; } .signing-guide li { min-height: 34px; padding: 0; justify-content: center; font-size: 0; } .recipient-viewer { padding: 18px 12px 35px; } .signing-footer { padding: 0 14px; } .signing-footer > span { display: none; } .signing-reject-mobile { display: inline-flex; margin-left: auto; } .consent-panel { right: 14px; bottom: 80px; } }
 @media (max-width: 760px) { .signing-footer { justify-content: space-between; } .signing-footer .signing-reject-mobile { display: inline-flex; margin-left: 0; } }
-@media (max-width: 480px) { .secure-note { font-size: 0; } .request-content, .completed-content { padding: 24px 14px; } .request-card, .completed-card { padding: 28px 20px; border-radius: 18px; } .recipient-field { padding: 5px 6px; } .recipient-field--signature { min-height: 48px; } .signature-dialog__header { padding: 20px 18px 15px; } .signature-tabs { padding: 12px 18px; gap: 7px; } .signature-tabs button { padding: 7px 6px; } .saved-signature-panel { padding: 16px 18px 20px; } .signature-canvas-wrap { margin: 16px 18px 0; } .signature-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; padding: 15px 18px 20px; } .signature-dialog__actions .recipient-primary { grid-column: 1 / span 2; grid-row: 1; } .completed-document { grid-template-columns: auto minmax(0,1fr); } .completed-status { grid-column: 2; width: fit-content; } }
+@media (max-width: 480px) { .secure-note { font-size: 0; } .request-content, .completed-content { padding: 24px 14px; } .request-card, .completed-card { padding: 28px 20px; border-radius: 18px; } .recipient-field { padding: 5px 6px; } .signature-dialog__header { padding: 20px 18px 15px; } .signature-tabs { padding: 12px 18px; gap: 7px; } .signature-tabs button { padding: 7px 6px; } .saved-signature-panel { padding: 16px 18px 20px; } .signature-canvas-wrap { margin: 16px 18px 0; } .signature-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; padding: 15px 18px 20px; } .signature-dialog__actions .recipient-primary { grid-column: 1 / span 2; grid-row: 1; } .completed-document { grid-template-columns: auto minmax(0,1fr); } .completed-status { grid-column: 2; width: fit-content; } }
 @media (prefers-reduced-motion: reduce) { .signing-progress i { transition: none; } }

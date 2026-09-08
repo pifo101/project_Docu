@@ -1,5 +1,7 @@
 (() => {
-    const documentCanvas = document.querySelector("[data-recipient-pdf]");
+    const recipientViewer = document.querySelector("[data-recipient-viewer]");
+    const recipientPages = document.querySelector("[data-recipient-pages]");
+    const recipientPageStatus = document.querySelector("[data-recipient-page-status]");
     const fields = Array.from(document.querySelectorAll("[data-completable]"));
     const progressCount = document.querySelector("[data-progress-count]");
     const progressBar = document.querySelector("[data-progress-bar]");
@@ -16,16 +18,81 @@
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
+    let recipientPdf = null;
+    let recipientRenderVersion = 0;
+    let recipientRenderedWidth = 0;
+    let recipientResizeTimer = null;
+    let assignedPageFocused = false;
+
+    function readSignatureField() {
+        const element = document.getElementById("recipient-signature-field");
+        if (!element) return { page: 1, x: 0.5, y: 0.74, width: 0.38, height: 0.1 };
+        try {
+            return JSON.parse(element.textContent);
+        } catch (error) {
+            console.warn("No se pudo leer la ubicación de firma.", error);
+            return null;
+        }
+    }
+
+    const signatureFieldData = readSignatureField();
+
+    function createRecipientPage(pageNumber, totalPages, width, height) {
+        const pageElement = document.createElement("div");
+        const canvas = document.createElement("canvas");
+        const label = document.createElement("span");
+        pageElement.className = "recipient-document-page";
+        pageElement.dataset.page = String(pageNumber);
+        pageElement.style.width = `${width}px`;
+        pageElement.style.height = `${height}px`;
+        canvas.className = "recipient-pdf-canvas";
+        canvas.setAttribute("role", "img");
+        canvas.setAttribute("aria-label", `Página ${pageNumber} de ${totalPages}`);
+        label.className = "recipient-page-number";
+        label.textContent = `Página ${pageNumber}`;
+        pageElement.append(canvas, label);
+        recipientPages.append(pageElement);
+        return { pageElement, canvas };
+    }
+
+    function placeSignatureField() {
+        const signatureField = fields.find((field) => field.dataset.completable === "signature");
+        if (!signatureField || !signatureFieldData) return;
+        const targetPage = recipientPages?.querySelector(`[data-page="${signatureFieldData.page}"]`);
+        if (!targetPage) return;
+        signatureField.style.left = `${signatureFieldData.x * 100}%`;
+        signatureField.style.top = `${signatureFieldData.y * 100}%`;
+        signatureField.style.width = `${signatureFieldData.width * 100}%`;
+        signatureField.style.height = `${signatureFieldData.height * 100}%`;
+        signatureField.style.right = "auto";
+        signatureField.style.bottom = "auto";
+        signatureField.hidden = false;
+        targetPage.append(signatureField);
+    }
+
+    function focusAssignedPage() {
+        if (assignedPageFocused || !signatureFieldData) return;
+        const targetPage = recipientPages?.querySelector(`[data-page="${signatureFieldData.page}"]`);
+        if (!targetPage) return;
+        assignedPageFocused = true;
+        targetPage.scrollIntoView({ block: "center" });
+    }
 
     function drawMockDocument() {
-        if (!documentCanvas) return;
+        if (!recipientPages) return;
+        recipientPages.replaceChildren();
+        const availableWidth = Math.max(1, Math.min(720, recipientPages.clientWidth || 720));
+        const pageHeight = availableWidth * (932 / 720);
+        const { canvas } = createRecipientPage(1, 1, availableWidth, pageHeight);
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        documentCanvas.width = 720 * ratio;
-        documentCanvas.height = 932 * ratio;
-        const context = documentCanvas.getContext("2d");
+        canvas.width = availableWidth * ratio;
+        canvas.height = pageHeight * ratio;
+        const context = canvas.getContext("2d");
         context.scale(ratio, ratio);
         context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, 720, 932);
+        context.fillRect(0, 0, availableWidth, pageHeight);
+        const documentScale = availableWidth / 720;
+        context.scale(documentScale, documentScale);
         context.fillStyle = "#101828";
         context.font = "700 22px Arial";
         context.fillText("CONTRATO DE SERVICIOS", 86, 100);
@@ -42,28 +109,62 @@
         context.fillText("Aceptación y firma", 86, 710);
         context.strokeStyle = "#d0d5dd";
         context.strokeRect(72, 70, 576, 792);
+        recipientPages.setAttribute("aria-busy", "false");
+        placeSignatureField();
+        focusAssignedPage();
     }
 
     async function renderRecipientDocument() {
-        if (!documentCanvas || !window.pdfjsLib) return drawMockDocument();
+        if (!recipientPages || !window.pdfjsLib) return drawMockDocument();
         try {
-            const pdfUrl = documentCanvas.dataset.pdfUrl;
+            const pdfUrl = recipientViewer?.dataset.pdfUrl;
             if (!pdfUrl) return drawMockDocument();
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-            const pdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
-            const page = await pdf.getPage(1);
-            const baseViewport = page.getViewport({ scale: 1 });
-            const scale = 720 / baseViewport.width;
-            const viewport = page.getViewport({ scale });
+            if (!recipientPdf) recipientPdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
+            const currentVersion = ++recipientRenderVersion;
+            const availableWidth = Math.max(1, Math.min(720, recipientPages.clientWidth || 720));
             const ratio = Math.min(window.devicePixelRatio || 1, 2);
-            documentCanvas.width = viewport.width * ratio;
-            documentCanvas.height = viewport.height * ratio;
-            documentCanvas.parentElement.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
-            await page.render({ canvasContext: documentCanvas.getContext("2d"), viewport: page.getViewport({ scale: scale * ratio }) }).promise;
+            recipientRenderedWidth = availableWidth;
+            recipientPages.replaceChildren();
+            recipientPages.setAttribute("aria-busy", "true");
+
+            for (let pageNumber = 1; pageNumber <= recipientPdf.numPages; pageNumber += 1) {
+                const page = await recipientPdf.getPage(pageNumber);
+                if (currentVersion !== recipientRenderVersion) return;
+                const baseViewport = page.getViewport({ scale: 1 });
+                const scale = availableWidth / baseViewport.width;
+                const viewport = page.getViewport({ scale });
+                const renderViewport = page.getViewport({ scale: scale * ratio });
+                const { canvas } = createRecipientPage(
+                    pageNumber,
+                    recipientPdf.numPages,
+                    viewport.width,
+                    viewport.height,
+                );
+                canvas.width = Math.floor(renderViewport.width);
+                canvas.height = Math.floor(renderViewport.height);
+                await page.render({ canvasContext: canvas.getContext("2d"), viewport: renderViewport }).promise;
+            }
+
+            if (currentVersion !== recipientRenderVersion) return;
+            recipientPages.setAttribute("aria-busy", "false");
+            if (recipientPageStatus) recipientPageStatus.textContent = `${recipientPdf.numPages} páginas`;
+            placeSignatureField();
+            focusAssignedPage();
         } catch (error) {
             console.warn("No se pudo mostrar el PDF; se utilizará la vista de demostración.", error);
             drawMockDocument();
         }
+    }
+
+    function scheduleRecipientResize() {
+        if (!recipientPdf || !recipientPages) return;
+        window.clearTimeout(recipientResizeTimer);
+        recipientResizeTimer = window.setTimeout(() => {
+            const availableWidth = Math.max(1, Math.min(720, recipientPages.clientWidth || 720));
+            if (Math.abs(availableWidth - recipientRenderedWidth) <= 8) return;
+            renderRecipientDocument();
+        }, 180);
     }
 
     function updateProgress() {
@@ -220,5 +321,6 @@
     }
 
     renderRecipientDocument();
+    window.addEventListener("resize", scheduleRecipientResize);
     updateProgress();
 })();
