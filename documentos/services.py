@@ -1,6 +1,6 @@
 from django.db.models import Count, Q
 
-from .models import DestinatarioDocumento
+from .models import DestinatarioDocumento, EnvioDocumento
 
 
 PENDING_RECIPIENT_STATES = (
@@ -11,7 +11,10 @@ PENDING_RECIPIENT_STATES = (
 
 def recipient_documents_queryset(user):
     return (
-        DestinatarioDocumento.objects.filter(usuario=user)
+        DestinatarioDocumento.objects.filter(
+            usuario=user,
+            envio__estado=EnvioDocumento.Estado.ENVIADO,
+        )
         .select_related("envio__documento", "envio__remitente")
         .order_by("-envio__fecha_envio", "-fecha_agregado")
     )

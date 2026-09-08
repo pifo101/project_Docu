@@ -4,6 +4,7 @@ import struct
 import tempfile
 import zlib
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.conf import settings
@@ -15,7 +16,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from documentos.models import DestinatarioDocumento, Documento, EnvioDocumento
+from documentos.models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
 from usuarios.models import Cargo, Comite
 
 from .forms import FIRMA_MAX_BYTES
@@ -329,6 +330,14 @@ class FirmaFlujoTests(TestCase):
             envio=self.envio,
             usuario=self.destinatario,
         )
+        self.campo_firma = CampoFirma.objects.create(
+            destinatario=self.solicitud,
+            pagina=1,
+            x=Decimal("0.1"),
+            y=Decimal("0.2"),
+            ancho=Decimal("0.3"),
+            alto=Decimal("0.1"),
+        )
         self.url = reverse("firmas:recipient_sign", args=[self.solicitud.pk])
 
     def _post(self, **changes):
@@ -355,6 +364,71 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
 
+    def test_vista_entrega_campo_firma_del_destinatario_autorizado(self):
+        self.client.force_login(self.destinatario)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.context["campo_firma"], self.campo_firma)
+        self.assertEqual(response.context["campo_firma"].destinatario, self.solicitud)
+
+    def test_campo_firma_de_pagina_tres_llega_al_frontend(self):
+        self.campo_firma.pagina = 3
+        self.campo_firma.save(update_fields=("pagina",))
+        self.client.force_login(self.destinatario)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.context["campo_firma_data"]["page"], 3)
+        self.assertContains(response, 'id="recipient-signature-field"')
+        self.assertContains(response, '"page": 3')
+
+    def test_parametro_campo_ajeno_no_cambia_campo_autorizado(self):
+        solicitud_ajena = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.no_destinatario,
+        )
+        campo_ajeno = CampoFirma.objects.create(
+            destinatario=solicitud_ajena,
+            pagina=3,
+            x=Decimal("0.4"),
+            y=Decimal("0.5"),
+            ancho=Decimal("0.2"),
+            alto=Decimal("0.1"),
+        )
+        self.client.force_login(self.destinatario)
+
+        response = self.client.get(self.url, {"campo_id": campo_ajeno.pk})
+
+        self.assertEqual(response.context["campo_firma"], self.campo_firma)
+        self.assertNotEqual(response.context["campo_firma"], campo_ajeno)
+
+    def test_envio_enviado_sin_campo_no_permite_abrir_ni_firmar(self):
+        self.campo_firma.delete()
+        self.client.force_login(self.destinatario)
+
+        get_response = self.client.get(self.url)
+        post_response = self.client.post(self.url, {
+            "metodo": Firma.Metodo.DIBUJADA,
+            "firma": png_data_url(),
+            "consentimiento": "1",
+        })
+
+        self.assertEqual(get_response.status_code, 409)
+        self.assertEqual(post_response.status_code, 409)
+        self.assertContains(get_response, "no tiene una ubicación de firma", status_code=409)
+        self.assertFalse(Firma.objects.exists())
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+
+    def test_template_expone_contrato_para_pdf_completo_y_pagina_objetivo(self):
+        self.client.force_login(self.destinatario)
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "data-recipient-pages")
+        self.assertContains(response, "data-pdf-url")
+        self.assertContains(response, '"x": 0.1')
+        self.assertContains(response, '"y": 0.2')
+
     def test_usuario_del_mismo_comite_que_no_es_destinatario_no_puede_acceder(self):
         self.client.force_login(self.no_destinatario)
         self.assertEqual(self.client.get(self.url).status_code, 404)
@@ -369,6 +443,27 @@ class FirmaFlujoTests(TestCase):
             ).status_code,
             404,
         )
+
+    def test_destinatario_borrador_de_preparacion_no_puede_firmar(self):
+        self.envio.estado = EnvioDocumento.Estado.PREPARACION
+        self.envio.save(update_fields=("estado",))
+        self.solicitud.estado = DestinatarioDocumento.Estado.BORRADOR
+        self.solicitud.save(update_fields=("estado",))
+        self.client.force_login(self.destinatario)
+
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertEqual(
+            self.client.post(
+                self.url,
+                {
+                    "metodo": Firma.Metodo.DIBUJADA,
+                    "firma": png_data_url(),
+                    "consentimiento": "1",
+                },
+            ).status_code,
+            404,
+        )
+        self.assertFalse(Firma.objects.exists())
 
     def test_presidente_no_puede_firmar_por_destinatario(self):
         self.client.force_login(self.presidente)
@@ -622,6 +717,12 @@ class FirmaFlujoTests(TestCase):
         self.assertIn("overflow-x: hidden", css)
         self.assertIn(".saved-signature-preview img", css)
         self.assertIn("grid-template-columns: repeat(2,minmax(0,1fr))", css)
+        self.assertNotIn("getPage(1)", javascript)
+        self.assertIn("pageNumber <= recipientPdf.numPages", javascript)
+        self.assertIn("signatureFieldData.page", javascript)
+        self.assertIn("signatureFieldData.x * 100", javascript)
+        self.assertIn("signatureFieldData.y * 100", javascript)
+        self.assertIn('window.addEventListener("resize", scheduleRecipientResize)', javascript)
 
     def test_metodo_perfil_copia_imagen_y_finaliza_documento(self):
         fecha_original = timezone.now() - timedelta(hours=2)
@@ -648,6 +749,21 @@ class FirmaFlujoTests(TestCase):
         self.assertTrue(firma.consentimiento)
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
         self.assertEqual(self.solicitud.fecha_visualizacion, fecha_original)
+
+    def test_firma_perfil_y_campo_firma_permanecen_separados(self):
+        campo = self.campo_firma
+        perfil = FirmaPerfil.objects.create(
+            usuario=self.destinatario,
+            imagen=png_bytes(),
+            formato="image/png",
+        )
+
+        self._post(metodo=Firma.Metodo.PERFIL, firma="")
+
+        firma = Firma.objects.get(destinatario=self.solicitud)
+        self.assertEqual(bytes(firma.imagen), bytes(perfil.imagen))
+        self.assertTrue(CampoFirma.objects.filter(pk=campo.pk).exists())
+        self.assertEqual(campo.destinatario, firma.destinatario)
 
     def test_metodo_perfil_desde_pendiente_registra_visualizacion(self):
         FirmaPerfil.objects.create(

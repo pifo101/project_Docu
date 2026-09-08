@@ -1,6 +1,9 @@
 import hashlib
+import json
 import shutil
 import tempfile
+from decimal import Decimal
+from io import BytesIO
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -9,10 +12,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from pypdf import PdfWriter
 
 from usuarios.models import Cargo, Comite
 
-from .models import DestinatarioDocumento, Documento, EnvioDocumento
+from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
 
 
 class DocumentsPageTests(TestCase):
@@ -223,8 +227,23 @@ class EnvioDocumentoTests(TestCase):
         )
         return envio, destinatario
 
-    def test_presidente_envia_documento_a_integrantes_activos_sin_incluirse(self):
+    def preparar_envio_con_campo(self):
         self.client.force_login(self.presidente)
+        self.client.get(reverse("documentos:document_editor", args=[self.documento.pk]))
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        destinatario = envio.destinatarios.get(usuario=self.miembro)
+        CampoFirma.objects.create(
+            destinatario=destinatario,
+            pagina=1,
+            x=Decimal("0.1"),
+            y=Decimal("0.1"),
+            ancho=Decimal("0.2"),
+            alto=Decimal("0.1"),
+        )
+        return envio, destinatario
+
+    def test_presidente_envia_documento_a_integrantes_activos_sin_incluirse(self):
+        self.preparar_envio_con_campo()
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
         self.assertRedirects(response, reverse("documentos:list"))
@@ -260,7 +279,7 @@ class EnvioDocumentoTests(TestCase):
             DestinatarioDocumento.objects.create(envio=envio, usuario=self.miembro)
 
     def test_doble_confirmacion_no_duplica_envio_ni_destinatarios(self):
-        self.client.force_login(self.presidente)
+        self.preparar_envio_con_campo()
         url = reverse("documentos:send", args=[self.documento.pk])
 
         self.client.post(url)
@@ -296,7 +315,7 @@ class EnvioDocumentoTests(TestCase):
         self.assertFalse(EnvioDocumento.objects.exists())
 
     def test_comite_enviado_por_post_es_ignorado(self):
-        self.client.force_login(self.presidente)
+        self.preparar_envio_con_campo()
 
         self.client.post(
             reverse("documentos:send", args=[self.documento.pk]),
@@ -306,6 +325,18 @@ class EnvioDocumentoTests(TestCase):
         envio = EnvioDocumento.objects.get()
         self.assertTrue(envio.destinatarios.filter(usuario=self.miembro).exists())
         self.assertFalse(envio.destinatarios.filter(usuario=self.usuario_externo).exists())
+
+    def test_no_se_envia_sin_preparacion_y_campos(self):
+        self.client.force_login(self.presidente)
+
+        response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_editor", args=[self.documento.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(EnvioDocumento.objects.exists())
 
     def test_destinatario_ve_pendiente_pero_no_documento_como_propio(self):
         self.crear_envio()
@@ -386,6 +417,314 @@ class EditorPageTests(TestCase):
         self.assertContains(response, "data-editor-continue")
         self.assertContains(response, f'data-review-url="{reverse("documentos:review")}"')
         self.assertContains(response, "pdf.min.js")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class CampoFirmaTests(TestCase):
+    def setUp(self):
+        self.comite = Comite.objects.create(nombre="Comité campos de firma")
+        self.otro_comite = Comite.objects.create(nombre="Comité campos externo")
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        self.propietario = self.crear_usuario("presidente-campos", self.comite, presidente)
+        self.destinatario_usuario = self.crear_usuario("destinatario-campos", self.comite, miembro)
+        self.no_autorizado = self.crear_usuario("no-autorizado-campos", self.comite, miembro)
+        self.otro_presidente = self.crear_usuario("presidente-externo-campos", self.otro_comite, presidente)
+        self.otro_destinatario_usuario = self.crear_usuario("destinatario-externo-campos", self.otro_comite, miembro)
+        self.documento = self.crear_documento(self.propietario, "campos.pdf", paginas=2)
+        self.otro_documento = self.crear_documento(self.otro_presidente, "externo.pdf")
+
+        self.client.force_login(self.propietario)
+        self.editor_url = reverse("documentos:document_editor", args=[self.documento.pk])
+        self.api_url = reverse("documentos:signature_fields", args=[self.documento.pk])
+        self.client.get(self.editor_url)
+        self.destinatario = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento,
+            usuario=self.destinatario_usuario,
+        )
+        self.destinatario_no_autorizado = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento,
+            usuario=self.no_autorizado,
+        )
+
+        self.client.force_login(self.otro_presidente)
+        self.client.get(reverse("documentos:document_editor", args=[self.otro_documento.pk]))
+        self.destinatario_externo = DestinatarioDocumento.objects.get(
+            envio__documento=self.otro_documento,
+            usuario=self.otro_destinatario_usuario,
+        )
+        self.client.force_login(self.propietario)
+
+    def tearDown(self):
+        for documento in (self.documento, self.otro_documento):
+            documento.archivo.delete(save=False)
+
+    def crear_usuario(self, nombre, comite, cargo):
+        return get_user_model().objects.create_user(
+            email=f"{nombre}@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name=nombre,
+            last_name="Prueba",
+            comite=comite,
+            cargo=cargo,
+        )
+
+    def crear_documento(self, propietario, nombre, paginas=1):
+        contenido = BytesIO()
+        escritor = PdfWriter()
+        for _ in range(paginas):
+            escritor.add_blank_page(width=612, height=792)
+        escritor.write(contenido)
+        return Documento.objects.create(
+            propietario=propietario,
+            archivo=SimpleUploadedFile(nombre, contenido.getvalue(), content_type="application/pdf"),
+            nombre_original=nombre,
+        )
+
+    def datos_campo(self, **cambios):
+        datos = {
+            "id": None,
+            "type": "signature",
+            "page": 2,
+            "x": 0.63,
+            "y": 0.71,
+            "width": 0.18,
+            "height": 0.07,
+            "recipient_id": self.destinatario.pk,
+        }
+        datos.update(cambios)
+        return datos
+
+    def guardar(self, campos):
+        return self.client.post(
+            self.api_url,
+            data=json.dumps({"fields": campos}),
+            content_type="application/json",
+        )
+
+    def datos_para_todos(self):
+        return [
+            self.datos_campo(),
+            self.datos_campo(
+                page=1,
+                x=0.1,
+                y=0.1,
+                recipient_id=self.destinatario_no_autorizado.pk,
+            ),
+        ]
+
+    def test_editor_real_muestra_documento_destinatarios_y_urls_backend(self):
+        response = self.client.get(self.editor_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "campos.pdf")
+        self.assertContains(response, str(self.destinatario_usuario))
+        self.assertContains(response, f'data-fields-url="{self.api_url}"')
+        self.assertContains(response, "data-editor-save")
+        script_path = finders.find("js/editor.js")
+        with open(script_path, encoding="utf-8") as script:
+            javascript = script.read()
+        self.assertIn("recipientsWithoutSignatureField", javascript)
+        self.assertIn("Falta un campo de firma para:", javascript)
+
+    def test_usuario_autorizado_guarda_y_recupera_campo_asociado(self):
+        response = self.guardar([self.datos_campo()])
+
+        self.assertEqual(response.status_code, 200)
+        campo = CampoFirma.objects.get()
+        self.assertEqual(campo.destinatario, self.destinatario)
+        self.assertEqual(campo.documento, self.documento)
+        self.assertEqual(campo.pagina, 2)
+        self.assertEqual(campo.x, Decimal("0.630000"))
+        self.assertEqual(campo.y, Decimal("0.710000"))
+        self.assertEqual(campo.ancho, Decimal("0.180000"))
+        self.assertEqual(campo.alto, Decimal("0.070000"))
+
+        recuperados = self.client.get(self.api_url).json()["fields"]
+        self.assertEqual(len(recuperados), 1)
+        self.assertEqual(recuperados[0]["recipient_id"], self.destinatario.pk)
+        self.assertEqual(recuperados[0]["page"], 2)
+
+    def test_campo_existente_se_actualiza_sin_duplicarse(self):
+        campo_id = self.guardar([self.datos_campo()]).json()["fields"][0]["id"]
+
+        response = self.guardar([self.datos_campo(id=campo_id, x=0.1, width=0.25)])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CampoFirma.objects.count(), 1)
+        campo = CampoFirma.objects.get()
+        self.assertEqual(campo.x, Decimal("0.100000"))
+        self.assertEqual(campo.ancho, Decimal("0.250000"))
+
+    def test_un_destinatario_no_admite_dos_campos(self):
+        response = self.guardar([self.datos_campo(), self.datos_campo(x=0.2)])
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("un solo campo", response.json()["error"])
+        self.assertEqual(CampoFirma.objects.count(), 0)
+
+        self.guardar([self.datos_campo()])
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CampoFirma.objects.create(
+                destinatario=self.destinatario,
+                pagina=1,
+                x=Decimal("0.1"),
+                y=Decimal("0.1"),
+                ancho=Decimal("0.2"),
+                alto=Decimal("0.1"),
+            )
+
+    def test_campo_omitido_se_elimina(self):
+        self.guardar([self.datos_campo()])
+
+        response = self.guardar([])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CampoFirma.objects.exists())
+
+    def test_usuario_no_autorizado_no_puede_consultar_ni_modificar(self):
+        self.client.force_login(self.no_autorizado)
+
+        self.assertEqual(self.client.get(self.api_url).status_code, 403)
+        self.assertEqual(self.guardar([self.datos_campo()]).status_code, 403)
+        self.assertFalse(CampoFirma.objects.exists())
+
+        self.client.force_login(self.otro_presidente)
+        self.assertEqual(self.client.get(self.editor_url).status_code, 404)
+        self.assertEqual(self.client.get(self.api_url).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse("documentos:download", args=[self.documento.pk])).status_code,
+            404,
+        )
+
+    def test_usuario_anonimo_debe_autenticarse(self):
+        self.client.logout()
+
+        response = self.client.get(self.api_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("usuarios:login"), response.url)
+
+    def test_rechaza_destinatario_de_otro_documento(self):
+        response = self.guardar([
+            self.datos_campo(recipient_id=self.destinatario_externo.pk)
+        ])
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(CampoFirma.objects.exists())
+
+    def test_rechaza_coordenadas_dimensiones_y_paginas_invalidas(self):
+        casos = (
+            {"x": -0.01},
+            {"y": 1.01},
+            {"width": 0},
+            {"height": 1.01},
+            {"x": 0.9, "width": 0.2},
+            {"y": 0.95, "height": 0.1},
+            {"page": 0},
+            {"page": 3},
+        )
+        for cambios in casos:
+            with self.subTest(cambios=cambios):
+                response = self.guardar([self.datos_campo(**cambios)])
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(CampoFirma.objects.exists())
+
+    def test_rechaza_strings_booleanos_y_valores_no_finitos(self):
+        casos = (
+            {"x": "0.1"},
+            {"y": True},
+            {"width": None},
+            {"height": float("nan")},
+            {"x": float("inf")},
+            {"y": float("-inf")},
+        )
+        for cambios in casos:
+            with self.subTest(cambios=cambios):
+                response = self.guardar([self.datos_campo(**cambios)])
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(CampoFirma.objects.exists())
+
+    def test_pdf_corrupto_devuelve_error_controlado(self):
+        self.documento.archivo.delete(save=False)
+        self.documento.archivo = SimpleUploadedFile(
+            "corrupto.pdf", b"%PDF-1.7\ncorrupto", content_type="application/pdf"
+        )
+        self.documento.save()
+
+        response = self.guardar([self.datos_campo(page=1)])
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("número de páginas", response.json()["error"])
+        self.assertFalse(CampoFirma.objects.exists())
+
+    def test_destinatarios_en_preparacion_no_aparecen_en_bandeja(self):
+        self.client.force_login(self.destinatario_usuario)
+
+        response = self.client.get(reverse("documentos:pending"))
+
+        self.assertNotContains(response, "campos.pdf")
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[self.destinatario.pk])
+            ).status_code,
+            404,
+        )
+
+    def test_confirmar_envio_publica_destinatarios_y_conserva_campos(self):
+        self.guardar(self.datos_para_todos())
+
+        response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+
+        self.assertRedirects(response, reverse("documentos:list"))
+        self.destinatario.refresh_from_db()
+        self.assertEqual(self.destinatario.envio.estado, EnvioDocumento.Estado.ENVIADO)
+        self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertEqual(self.destinatario.campos_firma.count(), 1)
+        self.assertEqual(CampoFirma.objects.count(), 2)
+
+        self.client.force_login(self.destinatario_usuario)
+        self.assertContains(self.client.get(reverse("documentos:pending")), "campos.pdf")
+
+    def test_falta_de_campo_mantiene_envio_y_destinatarios_en_borrador(self):
+        segundo_usuario = self.crear_usuario(
+            "segundo-destinatario", self.comite, self.destinatario_usuario.cargo
+        )
+        self.client.get(self.editor_url)
+        self.guardar(self.datos_para_todos())
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk]),
+            follow=True,
+        )
+
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        segundo = envio.destinatarios.get(usuario=segundo_usuario)
+        self.destinatario.refresh_from_db()
+        self.assertContains(response, str(segundo_usuario))
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
+        self.assertEqual(segundo.estado, DestinatarioDocumento.Estado.BORRADOR)
+
+    def test_campos_no_se_modifican_despues_del_envio(self):
+        campo_id = self.guardar(self.datos_para_todos()).json()["fields"][0]["id"]
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+
+        self.assertEqual(self.client.get(self.editor_url).status_code, 403)
+        self.assertEqual(self.client.get(self.api_url).status_code, 404)
+        response = self.guardar([self.datos_campo(id=campo_id, x=0.2)])
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(CampoFirma.objects.get(pk=campo_id).x, Decimal("0.630000"))
+
+    def test_estados_finales_incluyen_firmado_y_borrador(self):
+        self.assertIn(EnvioDocumento.Estado.PREPARACION, EnvioDocumento.Estado.values)
+        self.assertIn(EnvioDocumento.Estado.ENVIADO, EnvioDocumento.Estado.values)
+        self.assertEqual(
+            DestinatarioDocumento.Estado.values,
+            ["BORRADOR", "PENDIENTE", "VISTO", "FIRMADO"],
+        )
 
 
 class RecipientExperienceTests(TestCase):

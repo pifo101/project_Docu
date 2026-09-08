@@ -370,6 +370,32 @@
 
 .property-recipient span { color: #98a2b3; font-size: 8px; text-transform: uppercase; }
 .property-recipient strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.property-recipient select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    color: #344054;
+    background: #fff;
+    font: inherit;
+    font-size: 9px;
+}
+
+.editor-save {
+    width: 100%;
+    min-height: 36px;
+    margin-top: 12px;
+    border: 1px solid var(--color-primary);
+    border-radius: 8px;
+    color: var(--color-primary);
+    background: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.editor-save:hover:not(:disabled) { background: var(--color-primary-soft); }
+.editor-save:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .property-switch {
     display: grid;

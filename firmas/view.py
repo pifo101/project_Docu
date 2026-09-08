@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from documentos.models import DestinatarioDocumento
+from documentos.models import DestinatarioDocumento, EnvioDocumento
 
 from .forms import FirmaForm, FirmaPerfilForm
 from .models import Firma, FirmaPerfil
@@ -73,10 +73,17 @@ def recipient_sign_view(request, pk):
     destinatario = get_object_or_404(
         DestinatarioDocumento.objects.select_related(
             "envio__documento", "envio__remitente", "usuario"
-        ),
+        ).prefetch_related("campos_firma"),
         pk=pk,
         usuario=request.user,
+        envio__estado=EnvioDocumento.Estado.ENVIADO,
     )
+    campo_firma = destinatario.campos_firma.first()
+    if campo_firma is None:
+        return HttpResponse(
+            "Este envío no tiene una ubicación de firma asignada. Contacta al remitente.",
+            status=409,
+        )
 
     if destinatario.estado == DestinatarioDocumento.Estado.FIRMADO or Firma.objects.filter(
         destinatario=destinatario
@@ -103,13 +110,19 @@ def recipient_sign_view(request, pk):
                         DestinatarioDocumento.objects.select_for_update(),
                         pk=pk,
                         usuario=request.user,
+                        envio__estado=EnvioDocumento.Estado.ENVIADO,
                     )
                     if bloqueado.estado == DestinatarioDocumento.Estado.FIRMADO or Firma.objects.filter(
                         destinatario=bloqueado
                     ).exists():
                         messages.info(request, "Ya registraste tu firma para este documento.")
                         return redirect("documentos:user_completed")
-                    if bloqueado.estado not in (
+                    if not bloqueado.campos_firma.exists():
+                        form.add_error(
+                            None,
+                            "El envío no tiene una ubicación de firma asignada.",
+                        )
+                    elif bloqueado.estado not in (
                         DestinatarioDocumento.Estado.PENDIENTE,
                         DestinatarioDocumento.Estado.VISTO,
                     ):
@@ -160,4 +173,12 @@ def recipient_sign_view(request, pk):
         "documento": destinatario.envio.documento,
         "form": form,
         "firma_perfil": firma_perfil,
+        "campo_firma": campo_firma,
+        "campo_firma_data": {
+            "page": campo_firma.pagina,
+            "x": float(campo_firma.x),
+            "y": float(campo_firma.y),
+            "width": float(campo_firma.ancho),
+            "height": float(campo_firma.alto),
+        },
     })
