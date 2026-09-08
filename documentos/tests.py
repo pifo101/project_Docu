@@ -301,6 +301,33 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EnvioDocumento.objects.exists())
 
+    def test_presidente_de_comite_inactivo_no_puede_iniciar_envio(self):
+        self.comite.activo = False
+        self.comite.save(update_fields=("activo",))
+        self.client.force_login(self.presidente)
+
+        response = self.client.get(
+            reverse("documentos:document_editor", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(EnvioDocumento.objects.exists())
+
+    def test_envio_rechaza_destinatario_que_ya_no_pertenece_al_comite(self):
+        envio, destinatario = self.preparar_envio_con_campo()
+        self.miembro.comite = self.otro_comite
+        self.miembro.save(update_fields=("comite",))
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        envio.refresh_from_db()
+        destinatario.refresh_from_db()
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
+
     def test_presidente_no_puede_enviar_documento_ajeno(self):
         ajeno = Documento.objects.create(
             propietario=self.usuario_externo,
