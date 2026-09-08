@@ -29,7 +29,7 @@ const selectedName = selectedFile?.querySelector("strong");
 const selectedMeta = selectedFile?.querySelector("small");
 const removeFileButton = document.querySelector(".selected-file__remove");
 const continueButton = document.querySelector(".upload-continue");
-const maxFileSize = 20 * 1024 * 1024;
+const maxFileSize = Number(uploadForm?.dataset.maxFileSize || 20 * 1024 * 1024);
 let dragDepth = 0;
 let currentPdf = null;
 
@@ -70,7 +70,7 @@ function selectPdf(file) {
     }
 
     if (file.size > maxFileSize) {
-        showUploadError("El PDF supera el límite de 20 MB. Selecciona un archivo más pequeño.");
+        showUploadError(`El PDF supera el límite de ${formatFileSize(maxFileSize)}. Selecciona un archivo más pequeño.`);
         return;
     }
 

@@ -35,7 +35,7 @@
                     <span class="document-icon document-icon--pdf">PDF</span>
                     <div>
                         <small>Documento seleccionado</small>
-                        <strong data-workflow-document-name>{{ documento.nombre_original|default:"Contrato de servicios 2026.pdf" }}</strong>
+                        <strong data-workflow-document-name>{{ documento.nombre_original|default:"Documento de demostración.pdf" }}</strong>
                         <span>PDF · Listo para preparar</span>
                     </div>
                     <i aria-hidden="true">✓</i>
@@ -47,10 +47,10 @@
                             <span class="panel__overline">Destinatarios del documento</span>
                             <h2 id="recipient-summary-title">Resumen</h2>
                         </div>
-                        <strong data-recipient-count>0 destinatarios</strong>
+                        <strong data-recipient-count>{% if documento %}{{ integrantes|length }} destinatario{% if integrantes|length != 1 %}s{% endif %}{% else %}0 destinatarios{% endif %}</strong>
                     </div>
                     <div class="recipient-summary__content" data-recipient-summary aria-live="polite">
-                        <p>Selecciona un modo para comenzar.</p>
+                        {% if documento %}<p>Se incluirán únicamente los integrantes activos de {{ comite.nombre }}.</p><ul class="recipient-summary__people">{% for integrante in integrantes %}<li>{{ integrante }}</li>{% endfor %}</ul>{% else %}<p>Selecciona un modo para comenzar.</p>{% endif %}
                     </div>
                 </section>
             </aside>

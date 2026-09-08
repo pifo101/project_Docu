@@ -364,6 +364,19 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
 
+    def test_flujo_real_no_habilita_fallback_de_documento_demo(self):
+        self.client.force_login(self.destinatario)
+
+        response = self.client.get(self.url)
+        script_path = finders.find("js/recipient.js")
+        with open(script_path, encoding="utf-8") as script:
+            recipient_script = script.read()
+
+        self.assertContains(response, "data-pdf-url")
+        self.assertNotContains(response, 'data-demo="true"')
+        self.assertIn("if (demo) drawMockDocument();", recipient_script)
+        self.assertIn("else showDocumentError();", recipient_script)
+
     def test_vista_entrega_campo_firma_del_destinatario_autorizado(self):
         self.client.force_login(self.destinatario)
         response = self.client.get(self.url)
@@ -651,11 +664,15 @@ class FirmaFlujoTests(TestCase):
             Documento.objects.filter(pk=self.documento.pk, propietario=self.destinatario).exists()
         )
 
-    def test_pendientes_muestra_estado_firmado_sin_accion_de_firma(self):
+    def test_firmado_sale_de_pendientes_y_no_ofrece_firmar_de_nuevo(self):
         self._post()
-        response = self.client.get(reverse("documentos:pending"))
-        self.assertContains(response, "Firmado", count=2)
-        self.assertNotContains(response, "Revisar y firmar")
+        pending_response = self.client.get(reverse("documentos:pending"))
+        completed_response = self.client.get(reverse("documentos:user_completed"))
+
+        self.assertNotContains(pending_response, self.documento.nombre_original)
+        self.assertContains(completed_response, self.documento.nombre_original)
+        self.assertContains(completed_response, "Firmado")
+        self.assertNotContains(completed_response, "Revisar")
 
     def test_propietario_consulta_estados_y_otro_usuario_no(self):
         self.solicitud.estado = DestinatarioDocumento.Estado.VISTO
@@ -665,7 +682,8 @@ class FirmaFlujoTests(TestCase):
         self.client.force_login(self.presidente)
         response = self.client.get(detail_url)
         self.assertContains(response, "Estado de destinatarios")
-        self.assertContains(response, f"{self.destinatario} - Visto")
+        self.assertContains(response, str(self.destinatario))
+        self.assertContains(response, "Visto")
 
         self.client.force_login(self.no_destinatario)
         self.assertEqual(self.client.get(detail_url).status_code, 404)

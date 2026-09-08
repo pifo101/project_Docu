@@ -5,10 +5,12 @@ from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from documentos.models import EnvioDocumento
 from documentos.services import (
     PENDING_RECIPIENT_STATES,
     recipient_documents_context,
     recipient_documents_queryset,
+    sender_documents_context,
 )
 from firmas.models import FirmaPerfil
 
@@ -51,7 +53,18 @@ def dashboard_view(request):
         or request.user.is_superuser
         or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
     ):
-        return render(request, "usuarios/dashboard.html")
+        context = sender_documents_context(request.user)
+        documents = context["owned_documents"]
+        context.update(
+            recent_documents=documents[:5],
+            preparation_documents=documents.filter(
+                envio__estado=EnvioDocumento.Estado.PREPARACION
+            )[:5],
+            unsigned_documents=documents.filter(envio__isnull=True)[:5],
+            documento_max_file_size=settings.DOCUMENTO_MAX_FILE_SIZE,
+            documento_max_file_size_mb=settings.DOCUMENTO_MAX_FILE_SIZE // (1024 * 1024),
+        )
+        return render(request, "usuarios/dashboard.html", context)
 
     queryset = recipient_documents_queryset(request.user)
     context = recipient_documents_context(request.user)

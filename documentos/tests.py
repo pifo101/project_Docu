@@ -56,8 +56,9 @@ class DocumentsPageTests(TestCase):
 
         response = self.client.get(reverse("usuarios:dashboard"))
 
-        self.assertContains(response, f'href="{reverse("documentos:list")}"', count=2)
-        self.assertContains(response, f'data-editor-url="{reverse("documentos:recipients")}"')
+        self.assertContains(response, f'href="{reverse("documentos:list")}"')
+        self.assertNotContains(response, f'data-editor-url="{reverse("documentos:recipients")}"')
+        self.assertNotContains(response, "Andrea Morales")
 
     def test_document_detail_page_renders_activity(self):
         response = self.client.get(reverse("documentos:detail"))
@@ -246,7 +247,10 @@ class EnvioDocumentoTests(TestCase):
         self.preparar_envio_con_campo()
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
-        self.assertRedirects(response, reverse("documentos:list"))
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_detail", args=[self.documento.pk]),
+        )
         envio = EnvioDocumento.objects.get()
         self.assertEqual(envio.documento, self.documento)
         self.assertEqual(envio.remitente, self.presidente)
@@ -261,6 +265,7 @@ class EnvioDocumentoTests(TestCase):
 
     def test_pantallas_reales_muestran_documento_comite_e_integrantes(self):
         self.client.force_login(self.presidente)
+        self.client.get(reverse("documentos:document_editor", args=[self.documento.pk]))
 
         for nombre_ruta in ("committee_recipients", "send_review"):
             response = self.client.get(
@@ -271,6 +276,33 @@ class EnvioDocumentoTests(TestCase):
             self.assertContains(response, str(self.miembro))
             self.assertNotContains(response, str(self.inactivo))
             self.assertNotContains(response, str(self.usuario_externo))
+
+    def test_listado_usa_estado_y_rutas_del_envio_real(self):
+        self.preparar_envio_con_campo()
+        editor_url = reverse("documentos:document_editor", args=[self.documento.pk])
+        recipients_url = reverse("documentos:committee_recipients", args=[self.documento.pk])
+
+        preparation = self.client.get(reverse("documentos:list"))
+        self.assertContains(preparation, "En preparación")
+        self.assertContains(preparation, editor_url)
+
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        sent = self.client.get(reverse("documentos:list"))
+        self.assertContains(sent, "Enviado")
+        self.assertNotContains(sent, recipients_url)
+        self.assertNotContains(sent, editor_url)
+
+    def test_revision_usa_destinatarios_y_campos_preparados(self):
+        _, destinatario = self.preparar_envio_con_campo()
+
+        response = self.client.get(
+            reverse("documentos:send_review", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(destinatario.usuario))
+        self.assertContains(response, "Firma en página 1")
+        self.assertTrue(response.context["listo_para_enviar"])
 
     def test_restriccion_impide_destinatario_duplicado_en_un_envio(self):
         envio, _ = self.crear_envio()
@@ -677,7 +709,10 @@ class CampoFirmaTests(TestCase):
 
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
-        self.assertRedirects(response, reverse("documentos:list"))
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_detail", args=[self.documento.pk]),
+        )
         self.destinatario.refresh_from_db()
         self.assertEqual(self.destinatario.envio.estado, EnvioDocumento.Estado.ENVIADO)
         self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
@@ -859,6 +894,13 @@ class UserDocumentPortalTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["selected_status"], "pendientes")
+        self.assertContains(response, "Pendiente real.pdf")
+        self.assertContains(response, "Documento visto.pdf")
+        self.assertNotContains(response, "Documento firmado.pdf")
+
+    def test_legacy_pending_page_excludes_completed_documents(self):
+        response = self.client.get(reverse("documentos:pending"))
+
         self.assertContains(response, "Pendiente real.pdf")
         self.assertContains(response, "Documento visto.pdf")
         self.assertNotContains(response, "Documento firmado.pdf")
