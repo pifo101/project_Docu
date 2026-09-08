@@ -21,7 +21,11 @@ from .services import recipient_documents_context
 
 
 def _documento_de_presidente(request, pk):
-    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE or not request.user.comite_id:
+    if (
+        request.user.cargo_id != Cargo.Codigo.PRESIDENTE
+        or not request.user.comite_id
+        or not request.user.comite.activo
+    ):
         raise PermissionDenied
     return get_object_or_404(Documento, pk=pk, propietario=request.user)
 
@@ -146,7 +150,9 @@ def send_document_view(request, pk):
             return redirect("documentos:list")
 
         destinatarios = list(
-            envio.destinatarios.select_for_update().select_related("usuario")
+            envio.destinatarios.select_for_update().select_related(
+                "usuario__comite"
+            )
         )
         if not destinatarios:
             messages.error(request, "El envío no tiene destinatarios preparados.")
@@ -157,6 +163,13 @@ def send_document_view(request, pk):
         ):
             messages.error(request, "Los destinatarios no están en un estado válido para enviar.")
             return redirect("documentos:send_review", pk=documento.pk)
+        if any(
+            not destinatario.usuario.is_active
+            or destinatario.usuario.comite_id != request.user.comite_id
+            or not destinatario.usuario.comite.activo
+            for destinatario in destinatarios
+        ):
+            raise PermissionDenied
 
         destinatarios_con_campo = set(
             CampoFirma.objects.filter(destinatario__envio=envio).values_list(

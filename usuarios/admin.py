@@ -5,6 +5,19 @@ from .forms import RegistroUsuarioForm, UsuarioAdminChangeForm
 from .models import Cargo, Comite, Usuario
 
 
+class ComiteActivoFilter(admin.SimpleListFilter):
+    title = "comité"
+    parameter_name = "comite"
+
+    def lookups(self, request, model_admin):
+        return Comite.objects.filter(activo=True).values_list("pk", "nombre")
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(comite_id=self.value())
+        return queryset
+
+
 @admin.register(Comite)
 class ComiteAdmin(admin.ModelAdmin):
     list_display = ("nombre", "activo", "fecha_creacion", "fecha_actualizacion")
@@ -67,6 +80,6 @@ class UsuarioAdmin(UserAdmin):
         "cargo",
         "is_staff",
     )
-    list_filter = UserAdmin.list_filter + ("comite", "cargo")
+    list_filter = UserAdmin.list_filter + (ComiteActivoFilter, "cargo")
     search_fields = ("email", "first_name", "last_name")
     ordering = ("email",)
