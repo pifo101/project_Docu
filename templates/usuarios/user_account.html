@@ -2,15 +2,15 @@
 {% load static %}
 {% block title %}Mi cuenta | ADICLA Sign{% endblock %}
 {% block body_class %}dashboard-page user-portal-page{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/user_portal.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/user_portal.css' %}"><link rel="stylesheet" href="{% static 'css/profile.css' %}">{% endblock %}
 {% block content %}
 <div class="dashboard-shell">
     {% include "documentos/includes/user_sidebar.html" %}
     <div class="dashboard-main">
         <header class="dashboard-header"><button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="dashboard-header__title"><span class="mobile-logo">ADICLA <strong>Sign</strong></span><p>Configuración de la cuenta</p></div></header>
-        <main class="dashboard-content user-portal-content"><section class="documents-heading"><div><span class="section-eyebrow">Cuenta</span><h1>Mi perfil</h1><p>Información asociada a tu cuenta institucional.</p></div></section><section class="panel user-account-card"><div class="user-account-avatar">{{ request.user.first_name|first|default:"U" }}{{ request.user.last_name|first }}</div><div><h2>{{ request.user.get_full_name|default:request.user.email }}</h2><p>{{ request.user.email }}</p><dl><div><dt>Comité</dt><dd>{{ request.user.comite.nombre }}</dd></div><div><dt>Cargo</dt><dd>{{ request.user.cargo.nombre }}</dd></div></dl></div><form method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button class="user-logout-button" type="submit">Cerrar sesión</button></form></section></main>
+        <main class="dashboard-content user-portal-content"><section class="documents-heading"><div><span class="section-eyebrow">Cuenta</span><h1>Mi perfil</h1><p>Información asociada a tu cuenta institucional.</p></div></section><section class="panel user-account-card"><div class="user-account-avatar">{{ request.user.first_name|first|default:"U" }}{{ request.user.last_name|first }}</div><div><h2>{{ request.user.get_full_name|default:request.user.email }}</h2><p>{{ request.user.email }}</p><dl><div><dt>Comité</dt><dd>{{ request.user.comite.nombre }}</dd></div><div><dt>Cargo</dt><dd>{{ request.user.cargo.nombre }}</dd></div></dl></div><form method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button class="user-logout-button" type="submit">Cerrar sesión</button></form></section>{% include "usuarios/includes/profile_signature.html" %}</main>
     </div>
 </div>
 <button class="sidebar-backdrop" type="button" aria-label="Cerrar navegación" tabindex="-1"></button>
 {% endblock %}
-{% block extra_js %}<script src="{% static 'js/dashboard.js' %}" defer></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'js/dashboard.js' %}" defer></script><script src="{% static 'js/profile.js' %}" defer></script>{% endblock %}

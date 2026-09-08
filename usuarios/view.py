@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
@@ -9,6 +10,7 @@ from documentos.services import (
     recipient_documents_context,
     recipient_documents_queryset,
 )
+from firmas.models import FirmaPerfil
 
 from .forms import LoginUsuarioForm, RegistroUsuarioForm
 from .models import Cargo
@@ -73,7 +75,10 @@ def profile_view(request):
         )
         else "usuarios/user_account.html"
     )
-    return render(request, template_name)
+    return render(request, template_name, {
+        "firma_perfil": FirmaPerfil.objects.filter(usuario=request.user).first(),
+        "firma_perfil_max_file_size": settings.FIRMA_PERFIL_MAX_FILE_SIZE,
+    })
 
 
 @require_POST
