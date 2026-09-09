@@ -5,6 +5,8 @@ import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -14,12 +16,29 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from pypdf import PdfWriter
+from PIL import Image
+from pypdf import PdfReader, PdfWriter
 
-from firmas.models import Firma
 from usuarios.models import Cargo, Comite
 
-from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
+from firmas.models import Firma, FirmaPerfil
+
+from .models import (
+    CampoFirma,
+    DestinatarioDocumento,
+    Documento,
+    DocumentoResultado,
+    EnvioDocumento,
+)
+from .services import (
+    ResultadoPDFError,
+    calcular_colocacion_firma,
+    calcular_rectangulo_pdf,
+    construir_pdf_resultado,
+    document_tracking_context,
+    envio_esta_completo,
+    generar_resultado_si_completo,
+)
 
 
 class DocumentsPageTests(TestCase):
@@ -1224,6 +1243,27 @@ class DocumentTrackingTests(TestCase):
         self.client.force_login(user or self.owner)
         return self.client.get(self.url)
 
+    def _mark_signed(self, recipient):
+        DestinatarioDocumento.objects.filter(pk=recipient.pk).update(
+            estado=DestinatarioDocumento.Estado.FIRMADO
+        )
+        return Firma.objects.create(
+            destinatario=recipient,
+            imagen=b"firma",
+            consentimiento=True,
+        )
+
+    def _create_result(self):
+        content = b"%PDF-1.7\nresultado"
+        return DocumentoResultado.objects.create(
+            envio=self.envio,
+            archivo=SimpleUploadedFile(
+                "resultado.pdf", content, content_type="application/pdf"
+            ),
+            hash_sha256=hashlib.sha256(content).hexdigest(),
+            tamano=len(content),
+        )
+
     def test_presidente_autorizado_ve_estados_reales_y_progreso(self):
         response = self._get_detail()
 
@@ -1238,6 +1278,22 @@ class DocumentTrackingTests(TestCase):
         self.assertEqual(response.context["signature_completed"], 1)
         self.assertEqual(response.context["signature_total"], 3)
         self.assertEqual(response.context["signature_percentage"], 33)
+        self.assertIsNone(response.context["signed_document_download_url"])
+        self.assertFalse(response.context["resultado_disponible"])
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_dos_de_tres_muestra_67_por_ciento_sin_resultado(self):
+        self._mark_signed(self.viewed)
+
+        response = self._get_detail()
+
+        self.assertEqual(response.context["signature_completed"], 2)
+        self.assertEqual(response.context["signature_percentage"], 67)
+        self.assertIsNone(response.context["signed_document_download_url"])
+        self.assertContains(response, "2 de 3 firmas completadas")
+        self.assertContains(response, "67 %")
+        self.assertContains(response, "Documento firmado aún no disponible")
+        self.assertFalse(DocumentoResultado.objects.exists())
 
     def test_usuario_no_autorizado_no_accede_al_seguimiento(self):
         response = self._get_detail(self.outsider)
@@ -1282,30 +1338,46 @@ class DocumentTrackingTests(TestCase):
         self.assertNotContains(response, "Todos los destinatarios han firmado")
         self.assertNotContains(response, "Descargar documento firmado")
 
-    def test_todos_firmados_muestra_cierre_y_descarga_futura_deshabilitada(self):
+    def test_todos_firmados_sin_resultado_muestra_cierre_sin_url(self):
         for recipient in (self.viewed, self.pending):
-            DestinatarioDocumento.objects.filter(pk=recipient.pk).update(
-                estado=DestinatarioDocumento.Estado.FIRMADO
-            )
-            Firma.objects.create(
-                destinatario=recipient,
-                imagen=b"firma",
-                consentimiento=True,
-            )
+            self._mark_signed(recipient)
 
         response = self._get_detail()
 
         self.assertTrue(response.context["all_signed"])
+        self.assertEqual(response.context["signature_percentage"], 100)
+        self.assertIsNone(response.context["signed_document_download_url"])
         self.assertContains(response, "Todos los destinatarios han firmado")
         self.assertContains(response, "3 de 3 firmas completadas")
-        self.assertContains(response, "Descargar documento firmado")
-        self.assertContains(response, "Documento firmado disponible próximamente")
-        self.assertContains(response, 'type="button" disabled')
+        self.assertContains(response, "Documento firmado aún no disponible")
+        self.assertNotContains(response, ">Descargar documento firmado</a>")
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_resultado_real_expone_url_y_botones_separados(self):
+        for recipient in (self.viewed, self.pending):
+            self._mark_signed(recipient)
+        self._create_result()
+        result_url = reverse("documentos:download_result", args=[self.envio.pk])
         original_url = reverse("documentos:download", args=[self.document.pk])
-        self.assertNotContains(
-            response,
-            f'href="{original_url}">Descargar documento firmado',
-        )
+
+        response = self._get_detail()
+
+        self.assertTrue(response.context["resultado_disponible"])
+        self.assertEqual(response.context["signed_document_download_url"], result_url)
+        self.assertContains(response, f'href="{result_url}">Descargar documento firmado</a>')
+        self.assertContains(response, f'href="{original_url}">Abrir PDF original</a>')
+        self.assertNotContains(response, 'href="#"')
+
+    def test_contexto_de_seguimiento_solo_consulta_y_no_genera_resultado(self):
+        for recipient in (self.viewed, self.pending):
+            self._mark_signed(recipient)
+
+        context = document_tracking_context(self.document)
+
+        self.assertTrue(context["all_signed"])
+        self.assertFalse(context["resultado_disponible"])
+        self.assertIsNone(context["signed_document_download_url"])
+        self.assertFalse(DocumentoResultado.objects.exists())
 
     def test_envio_sin_destinatarios_no_divide_por_cero_ni_finaliza(self):
         empty_document = Documento.objects.create(
@@ -1330,3 +1402,418 @@ class DocumentTrackingTests(TestCase):
         self.assertFalse(response.context["all_signed"])
         self.assertContains(response, "Este envío no tiene destinatarios")
         self.assertNotContains(response, "Todos los destinatarios han firmado")
+
+
+class DocumentoResultadoTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        self.addCleanup(shutil.rmtree, self.media_root, True)
+        self.comite = Comite.objects.create(nombre="Comite resultado")
+        self.otro_comite = Comite.objects.create(nombre="Comite resultado externo")
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        self.propietario = self._usuario("resultado-presidente", self.comite, presidente)
+        self.usuario_a = self._usuario("resultado-a", self.comite, miembro)
+        self.usuario_b = self._usuario("resultado-b", self.comite, miembro)
+        self.no_relacionado = self._usuario("resultado-no", self.comite, miembro)
+        self.externo = self._usuario("resultado-externo", self.otro_comite, miembro)
+
+    def _usuario(self, nombre, comite, cargo):
+        return get_user_model().objects.create_user(
+            email=f"{nombre}@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name=nombre,
+            comite=comite,
+            cargo=cargo,
+        )
+
+    def _pdf(self, sizes=((612, 792),), rotations=None):
+        output = BytesIO()
+        writer = PdfWriter()
+        rotations = rotations or [0] * len(sizes)
+        for size, rotation in zip(sizes, rotations):
+            page = writer.add_blank_page(width=size[0], height=size[1])
+            if rotation:
+                page.rotate(rotation)
+        writer.write(output)
+        return output.getvalue()
+
+    def _image(self, image_format="PNG", size=(120, 40), transparent=False):
+        output = BytesIO()
+        if image_format == "JPEG":
+            image = Image.new("RGB", size, (18, 53, 110))
+        else:
+            image = Image.new("RGBA", size, (0, 0, 0, 0) if transparent else (18, 53, 110, 255))
+            if transparent:
+                for x in range(size[0]):
+                    image.putpixel((x, min(size[1] - 1, x * size[1] // size[0])), (18, 53, 110, 255))
+        image.save(output, image_format)
+        return output.getvalue()
+
+    def _crear_envio(self, sizes=((612, 792),), rotations=None, estado=EnvioDocumento.Estado.ENVIADO):
+        original = self._pdf(sizes, rotations)
+        documento = Documento.objects.create(
+            propietario=self.propietario,
+            archivo=SimpleUploadedFile("Acta reunion.pdf", original, content_type="application/pdf"),
+            nombre_original="Acta reunion.pdf",
+        )
+        envio = EnvioDocumento.objects.create(
+            documento=documento,
+            remitente=self.propietario,
+            estado=estado,
+        )
+        return envio, original
+
+    def _agregar_firmante(
+        self,
+        envio,
+        usuario,
+        pagina=1,
+        estado=DestinatarioDocumento.Estado.FIRMADO,
+        formato="image/png",
+        image_format="PNG",
+        image_size=(120, 40),
+        transparent=False,
+        campo=True,
+        firma=True,
+        x="0.10",
+        y="0.20",
+        ancho="0.30",
+        alto="0.10",
+        metodo=Firma.Metodo.DIBUJADA,
+    ):
+        destinatario = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=usuario,
+            estado=estado,
+        )
+        if campo:
+            CampoFirma.objects.create(
+                destinatario=destinatario,
+                pagina=pagina,
+                x=Decimal(x),
+                y=Decimal(y),
+                ancho=Decimal(ancho),
+                alto=Decimal(alto),
+            )
+        if firma:
+            Firma.objects.create(
+                destinatario=destinatario,
+                imagen=self._image(image_format, image_size, transparent),
+                formato=formato,
+                metodo=metodo,
+                consentimiento=True,
+            )
+        return destinatario
+
+    def _resultado_bytes(self, resultado):
+        with resultado.archivo.open("rb") as archivo:
+            return archivo.read()
+
+    def _image_objects(self, page):
+        return list(page.images)
+
+    def _drawn_image_count(self, page):
+        return sum(1 for _, operator in page.get_contents().operations if operator == b"Do")
+
+    def test_no_genera_si_falta_una_firma_y_detecta_envio_incompleto(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        self._agregar_firmante(
+            envio,
+            self.usuario_b,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+            firma=False,
+        )
+
+        self.assertFalse(envio_esta_completo(envio))
+        self.assertIsNone(generar_resultado_si_completo(envio.pk))
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_genera_unico_resultado_idempotente_despues_de_ultima_firma(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+
+        primero = generar_resultado_si_completo(envio.pk)
+        segundo = generar_resultado_si_completo(envio.pk)
+
+        self.assertTrue(envio_esta_completo(envio))
+        self.assertEqual(primero.pk, segundo.pk)
+        self.assertEqual(DocumentoResultado.objects.count(), 1)
+        self.assertEqual(
+            len(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf"))),
+            1,
+        )
+
+    def test_original_permanece_intacto_y_hashes_corresponden(self):
+        envio, original = self._crear_envio()
+        original_name = envio.documento.archivo.name
+        original_hash = envio.documento.hash_sha256
+        self._agregar_firmante(envio, self.usuario_a)
+
+        resultado = generar_resultado_si_completo(envio.pk)
+        result_bytes = self._resultado_bytes(resultado)
+        envio.documento.refresh_from_db()
+        with envio.documento.archivo.open("rb") as archivo:
+            persisted_original = archivo.read()
+
+        self.assertEqual(envio.documento.archivo.name, original_name)
+        self.assertEqual(persisted_original, original)
+        self.assertEqual(envio.documento.hash_sha256, original_hash)
+        self.assertEqual(original_hash, hashlib.sha256(original).hexdigest())
+        self.assertEqual(resultado.hash_sha256, hashlib.sha256(result_bytes).hexdigest())
+        self.assertEqual(resultado.tamano, len(result_bytes))
+        self.assertNotEqual(resultado.archivo.name, original_name)
+
+    def test_hash_original_inconsistente_impide_generacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        Documento.objects.filter(pk=envio.documento_id).update(hash_sha256="0" * 64)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "hash registrado"):
+            generar_resultado_si_completo(envio.pk)
+
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_resultado_es_pdf_valido_y_conserva_paginas_originales(self):
+        envio, _ = self._crear_envio(sizes=((612, 792), (595, 842), (792, 612)))
+        self._agregar_firmante(envio, self.usuario_a, pagina=1)
+        self._agregar_firmante(envio, self.usuario_b, pagina=3)
+
+        reader = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk))))
+
+        self.assertEqual(len(reader.pages), 3)
+        self.assertEqual(len(self._image_objects(reader.pages[0])), 1)
+        self.assertEqual(len(self._image_objects(reader.pages[1])), 0)
+        self.assertEqual(len(self._image_objects(reader.pages[2])), 1)
+
+    def test_dos_firmas_en_misma_pagina_crean_dos_imagenes(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, x="0.1")
+        self._agregar_firmante(envio, self.usuario_b, x="0.6")
+
+        reader = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk))))
+
+        # ReportLab reutiliza un solo XObject cuando los bytes coinciden, pero lo dibuja dos veces.
+        self.assertEqual(self._drawn_image_count(reader.pages[0]), 2)
+
+    def test_convierte_x_y_ancho_alto_con_origen_superior_izquierdo(self):
+        envio, _ = self._crear_envio()
+        destinatario = self._agregar_firmante(
+            envio, self.usuario_a, x="0.25", y="0.20", ancho="0.50", alto="0.10"
+        )
+        campo = destinatario.campos_firma.get()
+
+        self.assertEqual(calcular_rectangulo_pdf(campo, 600, 800), (150, 560, 300, 80))
+        self.assertEqual(
+            calcular_rectangulo_pdf(campo, 600, 800, left=10, bottom=20),
+            (160, 580, 300, 80),
+        )
+
+    def test_aspect_ratio_se_conserva_y_firma_se_centra(self):
+        x, y, width, height = calcular_colocacion_firma((10, 20, 200, 100), 400, 100)
+
+        self.assertEqual((x, y, width, height), (10, 45, 200, 50))
+        self.assertEqual(width / height, 4)
+
+    def test_png_dibujado_png_perfil_y_jpeg_perfil_funcionan_juntos(self):
+        envio, _ = self._crear_envio(sizes=((612, 792), (612, 792), (612, 792)))
+        self._agregar_firmante(envio, self.usuario_a, pagina=1, metodo=Firma.Metodo.DIBUJADA)
+        self._agregar_firmante(
+            envio,
+            self.usuario_b,
+            pagina=3,
+            formato="image/jpeg",
+            image_format="JPEG",
+            metodo=Firma.Metodo.PERFIL,
+        )
+
+        reader = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk))))
+
+        self.assertEqual(len(self._image_objects(reader.pages[0])), 1)
+        self.assertEqual(len(self._image_objects(reader.pages[2])), 1)
+
+    def test_png_transparente_genera_mascara_alfa(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, transparent=True)
+
+        reader = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk))))
+        images = self._image_objects(reader.pages[0])
+
+        self.assertEqual(len(images), 1)
+        self.assertIn("/SMask", images[0].indirect_reference.get_object())
+
+    def test_letter_a4_y_paginas_de_tamanos_diferentes(self):
+        sizes = ((612, 792), (595, 842), (842, 595))
+        envio, _ = self._crear_envio(sizes=sizes)
+        self._agregar_firmante(envio, self.usuario_a, pagina=1)
+        self._agregar_firmante(envio, self.usuario_b, pagina=3)
+
+        reader = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk))))
+
+        self.assertEqual(
+            [(float(page.mediabox.width), float(page.mediabox.height)) for page in reader.pages],
+            list(sizes),
+        )
+
+    def test_rotacion_se_transfiere_al_contenido_antes_de_firmar(self):
+        envio, _ = self._crear_envio(sizes=((612, 792),), rotations=(90,))
+        self._agregar_firmante(envio, self.usuario_a)
+
+        page = PdfReader(BytesIO(self._resultado_bytes(generar_resultado_si_completo(envio.pk)))).pages[0]
+
+        self.assertEqual(page.rotation, 0)
+        self.assertEqual((float(page.mediabox.width), float(page.mediabox.height)), (792, 612))
+        self.assertEqual(len(self._image_objects(page)), 1)
+
+    def test_pagina_inexistente_impide_generacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, pagina=2)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "página inexistente"):
+            generar_resultado_si_completo(envio.pk)
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_campo_faltante_impide_generacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, campo=False)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "exactamente un campo"):
+            generar_resultado_si_completo(envio.pk)
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_firma_faltante_impide_generacion_aunque_estado_sea_firmado(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, firma=False)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "exactamente una firma"):
+            generar_resultado_si_completo(envio.pk)
+
+    def test_formato_no_soportado_impide_generacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a, formato="image/gif")
+
+        with self.assertRaisesRegex(ResultadoPDFError, "formato no soportado"):
+            generar_resultado_si_completo(envio.pk)
+
+    def test_envio_no_enviado_impide_generacion(self):
+        envio, _ = self._crear_envio(estado=EnvioDocumento.Estado.PREPARACION)
+        self._agregar_firmante(envio, self.usuario_a)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "no está en estado ENVIADO"):
+            construir_pdf_resultado(envio)
+
+    def test_pdf_corrupto_falla_sin_resultado_parcial(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        envio.documento.archivo.delete(save=False)
+        envio.documento.archivo = SimpleUploadedFile("corrupto.pdf", b"%PDF-1.7\ncorrupto")
+        envio.documento.save()
+
+        with self.assertRaises(ResultadoPDFError):
+            generar_resultado_si_completo(envio.pk)
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+    def test_fallo_de_base_de_datos_limpia_archivo_resultante(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+
+        with patch.object(DocumentoResultado, "save", side_effect=RuntimeError("fallo")):
+            with self.assertRaisesRegex(ResultadoPDFError, "guardar"):
+                generar_resultado_si_completo(envio.pk)
+
+        self.assertFalse(DocumentoResultado.objects.exists())
+        self.assertEqual(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf")), [])
+
+    def test_descarga_protegida_para_propietario_y_destinatario_firmado(self):
+        envio, _ = self._crear_envio()
+        destinatario = self._agregar_firmante(envio, self.usuario_a)
+        generar_resultado_si_completo(envio.pk)
+        url = reverse("documentos:download_result", args=[envio.pk])
+
+        for usuario in (self.propietario, self.usuario_a):
+            self.client.force_login(usuario)
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "application/pdf")
+            self.assertIn("acta-reunion_firmado.pdf", response["Content-Disposition"])
+            self.assertIn("private", response["Cache-Control"])
+            self.assertIn("no-store", response["Cache-Control"])
+            self.assertTrue(b"".join(response.streaming_content).startswith(b"%PDF-"))
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.FIRMADO)
+
+    def test_usuarios_no_relacionados_y_otro_comite_reciben_404(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        generar_resultado_si_completo(envio.pk)
+        url = reverse("documentos:download_result", args=[envio.pk])
+
+        for usuario in (self.no_relacionado, self.externo):
+            self.client.force_login(usuario)
+            self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_antes_de_completarse_no_hay_descarga(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(
+            envio,
+            self.usuario_a,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+            firma=False,
+        )
+        self.client.force_login(self.propietario)
+
+        self.assertEqual(
+            self.client.get(reverse("documentos:download_result", args=[envio.pk])).status_code,
+            404,
+        )
+
+    def test_descarga_de_resultado_requiere_autenticacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        generar_resultado_si_completo(envio.pk)
+
+        response = self.client.get(reverse("documentos:download_result", args=[envio.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("usuarios:login"), response.url)
+
+    def test_firma_perfil_reemplazada_o_eliminada_no_afecta_generacion(self):
+        envio, _ = self._crear_envio()
+        original = self._image("PNG")
+        perfil = FirmaPerfil.objects.create(
+            usuario=self.usuario_a, imagen=original, formato="image/png"
+        )
+        destinatario = self._agregar_firmante(
+            envio, self.usuario_a, metodo=Firma.Metodo.PERFIL
+        )
+        firma = destinatario.firma
+        firma.imagen = bytes(perfil.imagen)
+        firma.save(update_fields=("imagen",))
+        perfil.imagen = self._image("JPEG")
+        perfil.formato = "image/jpeg"
+        perfil.save(update_fields=("imagen", "formato"))
+        perfil.delete()
+
+        resultado = generar_resultado_si_completo(envio.pk)
+
+        self.assertTrue(resultado.archivo)
+        firma.refresh_from_db()
+        self.assertEqual(bytes(firma.imagen), original)
+
+    def test_detalle_muestra_conteo_y_disponibilidad_minima(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        self.client.force_login(self.propietario)
+        url = reverse("documentos:document_detail", args=[envio.documento_id])
+
+        pendiente = self.client.get(url)
+        self.assertContains(pendiente, "1 de 1 firmas completadas")
+        self.assertContains(pendiente, "Documento firmado aún no disponible")
+
+        generar_resultado_si_completo(envio.pk)
+        completo = self.client.get(url)
+        self.assertContains(completo, "Descargar documento firmado")
+        self.assertNotContains(completo, "Documento firmado aún no disponible")

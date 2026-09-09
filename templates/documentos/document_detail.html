@@ -24,14 +24,14 @@
                         <div class="tracking-summary__content">
                             {% if all_signed %}<div class="completion-notice"><span aria-hidden="true">✓</span><div><strong>Todos los destinatarios han firmado</strong><small>El proceso de firma ha finalizado.</small></div></div>{% elif signature_total %}<div class="pending-notice"><strong>El proceso de firma sigue pendiente</strong><span>Faltan {{ signature_pending }} firma{% if signature_pending != 1 %}s{% endif %}.</span></div>{% else %}<p class="tracking-empty">Este envío no tiene destinatarios.</p>{% endif %}
                             <div class="signature-progress">
-                                <div class="signature-progress__copy"><strong>{{ signature_completed }} de {{ signature_total }} firmas completadas</strong><span>{{ signature_percentage }}%</span></div>
+                                <div class="signature-progress__copy"><strong>{{ signature_completed }} de {{ signature_total }} firmas completadas</strong><span>{{ signature_percentage }} %</span></div>
                                 <div class="signature-progress__track" role="progressbar" aria-label="Progreso de firmas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ signature_percentage }}"><span style="width: {{ signature_percentage }}%"></span></div>
                             </div>
                             <dl class="tracking-dates">
                                 <div><dt>Documento enviado</dt><dd>{% if envio.estado == 'ENVIADO' and envio.fecha_envio %}{{ envio.fecha_envio|date:"d/m/Y H:i" }}{% else %}Aún no enviado{% endif %}</dd></div>
                                 <div><dt>Última actividad</dt><dd>{% if last_activity %}{{ last_activity.description }}<small>{{ last_activity.occurred_at|date:"d/m/Y H:i" }}</small>{% else %}Sin actividad registrada{% endif %}</dd></div>
                             </dl>
-                            {% if all_signed %}<div class="signed-download">{% if signed_document_download_url %}<a class="primary-action" href="{{ signed_document_download_url }}">Descargar documento firmado</a>{% else %}<button class="primary-action" type="button" disabled>Descargar documento firmado</button><small>Documento firmado disponible próximamente</small>{% endif %}</div>{% endif %}
+                            <div class="signed-download">{% if signed_document_download_url %}<a class="primary-action" href="{{ signed_document_download_url }}">Descargar documento firmado</a>{% else %}<small>Documento firmado aún no disponible</small>{% endif %}</div>
                         </div>
                     </section>
                     <section class="workflow-card">
