@@ -1,14 +1,18 @@
 import json
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.cache import patch_cache_control
+from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods, require_POST
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -16,8 +20,10 @@ from pypdf.errors import PdfReadError
 from usuarios.models import Cargo
 
 from .forms import DocumentoForm
-from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
+from .models import CampoFirma, DestinatarioDocumento, Documento, DocumentoResultado, EnvioDocumento
 from .services import (
+    ResultadoPDFError,
+    generar_resultado_si_completo,
     recipient_documents_context,
     sender_documents_context,
 )
@@ -253,6 +259,23 @@ def owned_document_detail_view(request, pk):
     )
     context = sender_documents_context(request.user)
     context["documento"] = documento
+    if hasattr(documento, "envio"):
+        context["total_destinatarios"] = documento.envio.destinatarios.count()
+        context["total_firmados"] = documento.envio.destinatarios.filter(
+            estado=DestinatarioDocumento.Estado.FIRMADO
+        ).count()
+        if (
+            context["total_destinatarios"]
+            and context["total_firmados"] == context["total_destinatarios"]
+            and not DocumentoResultado.objects.filter(envio=documento.envio).exists()
+        ):
+            try:
+                generar_resultado_si_completo(documento.envio.pk)
+            except ResultadoPDFError:
+                messages.warning(request, "No se pudo generar el PDF resultante.")
+        context["resultado_disponible"] = DocumentoResultado.objects.filter(
+            envio=documento.envio
+        ).exists()
     return render(request, "documentos/document_detail.html", context)
 
 
@@ -284,6 +307,37 @@ def received_document_view(request, pk):
         content_type="application/pdf",
         filename=documento.nombre_original,
     )
+
+
+@login_required
+def download_result_view(request, pk):
+    resultado = get_object_or_404(
+        DocumentoResultado.objects.select_related("envio__documento").filter(
+            Q(envio__documento__propietario=request.user)
+            | Q(envio__remitente=request.user)
+            | Q(
+                envio__destinatarios__usuario=request.user,
+                envio__destinatarios__estado=DestinatarioDocumento.Estado.FIRMADO,
+            )
+        ).distinct(),
+        envio_id=pk,
+        envio__estado=EnvioDocumento.Estado.ENVIADO,
+    )
+    if not resultado.archivo:
+        raise Http404
+    stem = slugify(Path(resultado.envio.documento.nombre_original).stem) or "documento"
+    try:
+        archivo = resultado.archivo.open("rb")
+    except OSError as error:
+        raise Http404 from error
+    response = FileResponse(
+        archivo,
+        as_attachment=True,
+        content_type="application/pdf",
+        filename=f"{stem}_firmado.pdf",
+    )
+    patch_cache_control(response, private=True, no_store=True)
+    return response
 
 
 def document_detail_view(request):

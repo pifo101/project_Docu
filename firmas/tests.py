@@ -5,6 +5,7 @@ import tempfile
 import zlib
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
 from django.conf import settings
@@ -15,8 +16,16 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pypdf import PdfWriter
 
-from documentos.models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
+from documentos.models import (
+    CampoFirma,
+    DestinatarioDocumento,
+    Documento,
+    DocumentoResultado,
+    EnvioDocumento,
+)
+from documentos.services import ResultadoPDFError
 from usuarios.models import Cargo, Comite
 
 from .forms import FIRMA_MAX_BYTES
@@ -350,6 +359,17 @@ class FirmaFlujoTests(TestCase):
         self.client.force_login(self.destinatario)
         return self.client.post(self.url, data)
 
+    def _usar_pdf_valido(self, paginas=1):
+        output = BytesIO()
+        writer = PdfWriter()
+        for _ in range(paginas):
+            writer.add_blank_page(width=612, height=792)
+        writer.write(output)
+        self.documento.archivo = SimpleUploadedFile(
+            "acuerdo-valido.pdf", output.getvalue(), content_type="application/pdf"
+        )
+        self.documento.save()
+
     def test_destinatario_puede_acceder_y_la_revision_marca_visto(self):
         self.client.force_login(self.destinatario)
 
@@ -505,6 +525,65 @@ class FirmaFlujoTests(TestCase):
         self.assertTrue(bytes(firma.imagen).startswith(b"\x89PNG"))
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+
+    def test_ultima_firma_genera_pdf_resultante_automaticamente(self):
+        self._usar_pdf_valido()
+
+        response = self._post()
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        resultado = DocumentoResultado.objects.get(envio=self.envio)
+        with resultado.archivo.open("rb") as archivo:
+            self.assertTrue(archivo.read().startswith(b"%PDF-"))
+
+    def test_resultado_solo_se_genera_despues_del_ultimo_destinatario(self):
+        self._usar_pdf_valido(paginas=3)
+        segunda = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.no_destinatario,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+        )
+        CampoFirma.objects.create(
+            destinatario=segunda,
+            pagina=3,
+            x=Decimal("0.4"),
+            y=Decimal("0.1"),
+            ancho=Decimal("0.3"),
+            alto=Decimal("0.1"),
+        )
+
+        self._post()
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+        self.client.force_login(self.no_destinatario)
+        response = self.client.post(
+            reverse("firmas:recipient_sign", args=[segunda.pk]),
+            {
+                "metodo": Firma.Metodo.DIBUJADA,
+                "firma": png_data_url(),
+                "consentimiento": "1",
+            },
+        )
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertEqual(DocumentoResultado.objects.filter(envio=self.envio).count(), 1)
+        self.assertTrue(CampoFirma.objects.filter(destinatario__envio=self.envio).count(), 2)
+
+    def test_resultado_se_reintenta_si_la_generacion_inicial_falla(self):
+        self._usar_pdf_valido()
+        with patch(
+            "firmas.view.generar_resultado_si_completo",
+            side_effect=ResultadoPDFError("fallo transitorio"),
+        ):
+            response = self._post()
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+        response = self.client.get(self.url)
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertTrue(DocumentoResultado.objects.filter(envio=self.envio).exists())
 
     def test_fecha_visualizacion_existente_se_conserva(self):
         fecha_original = timezone.now() - timedelta(days=1)
