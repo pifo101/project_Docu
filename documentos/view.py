@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -18,6 +19,7 @@ from usuarios.models import Cargo
 from .forms import DocumentoForm
 from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
 from .services import (
+    document_tracking_context,
     recipient_documents_context,
     sender_documents_context,
 )
@@ -246,13 +248,20 @@ def upload_document_view(request):
 
 @login_required
 def owned_document_detail_view(request, pk):
+    tracking_recipients = DestinatarioDocumento.objects.select_related(
+        "usuario",
+        "firma",
+    ).order_by("usuario__first_name", "usuario__last_name", "usuario__email")
     documento = get_object_or_404(
-        Documento.objects.prefetch_related("envio__destinatarios__usuario"),
+        Documento.objects.select_related("envio").prefetch_related(
+            Prefetch("envio__destinatarios", queryset=tracking_recipients)
+        ),
         pk=pk,
         propietario=request.user,
     )
     context = sender_documents_context(request.user)
     context["documento"] = documento
+    context.update(document_tracking_context(documento))
     return render(request, "documentos/document_detail.html", context)
 
 

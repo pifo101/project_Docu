@@ -2,6 +2,7 @@ import hashlib
 import json
 import shutil
 import tempfile
+from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 
@@ -12,8 +13,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from pypdf import PdfWriter
 
+from firmas.models import Firma
 from usuarios.models import Cargo, Comite
 
 from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
@@ -1145,3 +1148,185 @@ class UserDocumentPortalTests(TestCase):
         response = self.client.get(reverse("usuarios:dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Nuevo documento")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class DocumentTrackingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.comite = Comite.objects.create(nombre="Comite de seguimiento")
+        cls.otro_comite = Comite.objects.create(nombre="Comite ajeno de seguimiento")
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.owner = cls._user("presidente-seguimiento", cls.comite, presidente, "Paula")
+        cls.signed_user = cls._user("ana-seguimiento", cls.comite, miembro, "Ana")
+        cls.viewed_user = cls._user("carlos-seguimiento", cls.comite, miembro, "Carlos")
+        cls.pending_user = cls._user("maria-seguimiento", cls.comite, miembro, "Maria")
+        cls.outsider = cls._user("ajeno-seguimiento", cls.otro_comite, miembro, "Ajeno")
+        cls.document = Documento.objects.create(
+            propietario=cls.owner,
+            archivo=SimpleUploadedFile("seguimiento.pdf", b"%PDF-1.7\nseguimiento"),
+            nombre_original="seguimiento.pdf",
+        )
+        cls.envio = EnvioDocumento.objects.create(
+            documento=cls.document,
+            remitente=cls.owner,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        cls.sent_at = timezone.now() - timedelta(days=2)
+        EnvioDocumento.objects.filter(pk=cls.envio.pk).update(fecha_envio=cls.sent_at)
+        cls.envio.refresh_from_db()
+
+        cls.signed = DestinatarioDocumento.objects.create(
+            envio=cls.envio,
+            usuario=cls.signed_user,
+            estado=DestinatarioDocumento.Estado.FIRMADO,
+            fecha_visualizacion=cls.sent_at + timedelta(hours=1),
+        )
+        cls.viewed = DestinatarioDocumento.objects.create(
+            envio=cls.envio,
+            usuario=cls.viewed_user,
+            estado=DestinatarioDocumento.Estado.VISTO,
+            fecha_visualizacion=cls.sent_at + timedelta(hours=2),
+        )
+        cls.pending = DestinatarioDocumento.objects.create(
+            envio=cls.envio,
+            usuario=cls.pending_user,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+        )
+        cls.signature = Firma.objects.create(
+            destinatario=cls.signed,
+            imagen=b"firma-ana",
+            consentimiento=True,
+        )
+        cls.signed_at = cls.sent_at + timedelta(hours=3)
+        Firma.objects.filter(pk=cls.signature.pk).update(fecha_firma=cls.signed_at)
+        cls.signature.refresh_from_db()
+        cls.url = reverse("documentos:document_detail", args=[cls.document.pk])
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    @classmethod
+    def _user(cls, email_prefix, comite, cargo, first_name):
+        return get_user_model().objects.create_user(
+            email=f"{email_prefix}@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name=first_name,
+            last_name="Prueba",
+            comite=comite,
+            cargo=cargo,
+        )
+
+    def _get_detail(self, user=None):
+        self.client.force_login(user or self.owner)
+        return self.client.get(self.url)
+
+    def test_presidente_autorizado_ve_estados_reales_y_progreso(self):
+        response = self._get_detail()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(self.signed_user))
+        self.assertContains(response, str(self.viewed_user))
+        self.assertContains(response, str(self.pending_user))
+        self.assertContains(response, "Firmado")
+        self.assertContains(response, "Visto")
+        self.assertContains(response, "Pendiente")
+        self.assertContains(response, "1 de 3 firmas completadas")
+        self.assertEqual(response.context["signature_completed"], 1)
+        self.assertEqual(response.context["signature_total"], 3)
+        self.assertEqual(response.context["signature_percentage"], 33)
+
+    def test_usuario_no_autorizado_no_accede_al_seguimiento(self):
+        response = self._get_detail(self.outsider)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotContains(response, str(self.signed_user), status_code=404)
+
+    def test_historial_incluye_envio_visualizaciones_y_firma_en_orden(self):
+        response = self._get_detail()
+        events = response.context["activity_events"]
+
+        self.assertEqual([event["occurred_at"] for event in events], sorted(
+            event["occurred_at"] for event in events
+        ))
+        self.assertEqual(events[0]["description"], "Documento enviado")
+        self.assertIn(f"{self.signed_user} visualizó el documento", [
+            event["description"] for event in events
+        ])
+        self.assertIn(f"{self.viewed_user} visualizó el documento", [
+            event["description"] for event in events
+        ])
+        self.assertIn(f"{self.signed_user} firmó el documento", [
+            event["description"] for event in events
+        ])
+        self.assertEqual(
+            response.context["last_activity"]["description"],
+            f"{self.signed_user} firmó el documento",
+        )
+
+    def test_fechas_nulas_no_generan_eventos_ni_errores(self):
+        response = self._get_detail()
+        descriptions = [event["description"] for event in response.context["activity_events"]]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(any(str(self.pending_user) in description for description in descriptions))
+
+    def test_proceso_incompleto_no_muestra_finalizacion_ni_descarga_firmada(self):
+        response = self._get_detail()
+
+        self.assertFalse(response.context["all_signed"])
+        self.assertContains(response, "El proceso de firma sigue pendiente")
+        self.assertNotContains(response, "Todos los destinatarios han firmado")
+        self.assertNotContains(response, "Descargar documento firmado")
+
+    def test_todos_firmados_muestra_cierre_y_descarga_futura_deshabilitada(self):
+        for recipient in (self.viewed, self.pending):
+            DestinatarioDocumento.objects.filter(pk=recipient.pk).update(
+                estado=DestinatarioDocumento.Estado.FIRMADO
+            )
+            Firma.objects.create(
+                destinatario=recipient,
+                imagen=b"firma",
+                consentimiento=True,
+            )
+
+        response = self._get_detail()
+
+        self.assertTrue(response.context["all_signed"])
+        self.assertContains(response, "Todos los destinatarios han firmado")
+        self.assertContains(response, "3 de 3 firmas completadas")
+        self.assertContains(response, "Descargar documento firmado")
+        self.assertContains(response, "Documento firmado disponible próximamente")
+        self.assertContains(response, 'type="button" disabled')
+        original_url = reverse("documentos:download", args=[self.document.pk])
+        self.assertNotContains(
+            response,
+            f'href="{original_url}">Descargar documento firmado',
+        )
+
+    def test_envio_sin_destinatarios_no_divide_por_cero_ni_finaliza(self):
+        empty_document = Documento.objects.create(
+            propietario=self.owner,
+            archivo=SimpleUploadedFile("vacio.pdf", b"%PDF-1.7\nvacio"),
+            nombre_original="vacio.pdf",
+        )
+        EnvioDocumento.objects.create(
+            documento=empty_document,
+            remitente=self.owner,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(
+            reverse("documentos:document_detail", args=[empty_document.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["signature_total"], 0)
+        self.assertEqual(response.context["signature_percentage"], 0)
+        self.assertFalse(response.context["all_signed"])
+        self.assertContains(response, "Este envío no tiene destinatarios")
+        self.assertNotContains(response, "Todos los destinatarios han firmado")
