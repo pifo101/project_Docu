@@ -9,9 +9,18 @@ from django.utils.cache import patch_cache_control
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from documentos.models import DestinatarioDocumento, EnvioDocumento
+from documentos.services import ResultadoPDFError, generar_resultado_si_completo
 
 from .forms import FirmaForm, FirmaPerfilForm
 from .models import Firma, FirmaPerfil
+
+
+def _intentar_generar_resultado(request, envio_id):
+    try:
+        return generar_resultado_si_completo(envio_id)
+    except ResultadoPDFError:
+        messages.warning(request, "No se pudo generar el PDF resultante.")
+        return None
 
 
 def request_view(request):
@@ -88,6 +97,7 @@ def recipient_sign_view(request, pk):
     if destinatario.estado == DestinatarioDocumento.Estado.FIRMADO or Firma.objects.filter(
         destinatario=destinatario
     ).exists():
+        _intentar_generar_resultado(request, destinatario.envio_id)
         messages.info(request, "Ya registraste tu firma para este documento.")
         return redirect("documentos:user_completed")
 
@@ -104,6 +114,7 @@ def recipient_sign_view(request, pk):
     else:
         form = FirmaForm(request.POST)
         if form.is_valid():
+            envio_id = None
             try:
                 with transaction.atomic():
                     bloqueado = get_object_or_404(
@@ -159,12 +170,14 @@ def recipient_sign_view(request, pk):
                             )
                             bloqueado.estado = DestinatarioDocumento.Estado.FIRMADO
                             bloqueado.save(update_fields=("estado", "fecha_visualizacion"))
+                            envio_id = bloqueado.envio_id
             except IntegrityError:
                 if Firma.objects.filter(destinatario_id=pk).exists():
                     messages.info(request, "Ya registraste tu firma para este documento.")
                     return redirect("documentos:user_completed")
                 raise
             if not form.errors:
+                _intentar_generar_resultado(request, envio_id)
                 messages.success(request, "Tu firma y aceptación se registraron correctamente.")
                 return redirect("documentos:user_completed")
 

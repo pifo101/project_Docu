@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
@@ -6,8 +7,14 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.utils import timezone
 
 from .validators import validar_pdf
+
+
+def ruta_documento_resultado(instance, filename):
+    fecha = instance.fecha_generacion or timezone.now()
+    return f"documentos_resultados/{fecha:%Y/%m}/{uuid.uuid4().hex}.pdf"
 
 
 class Documento(models.Model):
@@ -75,6 +82,26 @@ class EnvioDocumento(models.Model):
 
     def __str__(self):
         return f"{self.documento} - {self.get_estado_display()}"
+
+
+class DocumentoResultado(models.Model):
+    envio = models.OneToOneField(
+        EnvioDocumento,
+        on_delete=models.CASCADE,
+        related_name="resultado",
+    )
+    archivo = models.FileField(upload_to=ruta_documento_resultado)
+    hash_sha256 = models.CharField(max_length=64, editable=False)
+    tamano = models.PositiveBigIntegerField(editable=False)
+    fecha_generacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-fecha_generacion",)
+        verbose_name = "documento resultado"
+        verbose_name_plural = "documentos resultado"
+
+    def __str__(self):
+        return f"Resultado firmado de {self.envio.documento}"
 
 
 class DestinatarioDocumento(models.Model):

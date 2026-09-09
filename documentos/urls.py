@@ -29,6 +29,7 @@ urlpatterns = [
     path("<int:pk>/campos-firma/", view.signature_fields_view, name="signature_fields"),
     path("<int:pk>/enviar/", view.send_document_view, name="send"),
     path("recibidos/<int:pk>/ver/", view.received_document_view, name="received_document"),
+    path("envios/<int:pk>/resultado/", view.download_result_view, name="download_result"),
     path("pendientes/", view.pending_view, name="pending"),
     # Prototipos aislados: ninguna navegación del flujo real debe depender de estas rutas.
     path("demo/nuevo/destinatarios/", view.recipients_view, name="recipients"),
