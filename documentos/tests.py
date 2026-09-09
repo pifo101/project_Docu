@@ -56,8 +56,33 @@ class DocumentsPageTests(TestCase):
 
         response = self.client.get(reverse("usuarios:dashboard"))
 
-        self.assertContains(response, f'href="{reverse("documentos:list")}"', count=2)
-        self.assertContains(response, f'data-editor-url="{reverse("documentos:recipients")}"')
+        self.assertContains(response, f'href="{reverse("documentos:list")}"')
+        self.assertNotContains(response, f'data-editor-url="{reverse("documentos:recipients")}"')
+        self.assertNotContains(response, "Andrea Morales")
+
+    def test_navegacion_autenticada_no_enlaza_rutas_demo(self):
+        comite = Comite.objects.create(nombre="Comité navegación real")
+        presidente = get_user_model().objects.create_user(
+            email="navegacion-real@adicla.org.gt",
+            password="ClaveSegura!2026",
+            comite=comite,
+            cargo=Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE),
+        )
+        self.client.force_login(presidente)
+        demo_urls = (
+            reverse("documentos:detail"),
+            reverse("documentos:recipients"),
+            reverse("documentos:editor"),
+            reverse("documentos:review"),
+            reverse("firmas:request"),
+        )
+
+        for route_name in ("usuarios:dashboard", "usuarios:profile", "documentos:list"):
+            response = self.client.get(reverse(route_name))
+            self.assertContains(response, f'href="{reverse("documentos:user_pending")}"')
+            self.assertNotContains(response, f'href="{reverse("documentos:pending")}"')
+            for demo_url in demo_urls:
+                self.assertNotContains(response, f'href="{demo_url}')
 
     def test_document_detail_page_renders_activity(self):
         response = self.client.get(reverse("documentos:detail"))
@@ -172,6 +197,25 @@ class DocumentoUploadTests(TestCase):
         self.assertEqual(self.client.get(reverse("documentos:document_detail", args=[ajeno.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse("documentos:download", args=[ajeno.pk])).status_code, 404)
 
+    def test_miembro_no_ve_acciones_de_preparacion_o_envio(self):
+        documento = Documento.objects.create(
+            propietario=self.usuario,
+            archivo=self._pdf("miembro.pdf"),
+            nombre_original="miembro.pdf",
+        )
+        self.client.force_login(self.usuario)
+
+        response = self.client.get(reverse("documentos:list"))
+
+        self.assertNotContains(
+            response,
+            reverse("documentos:committee_recipients", args=[documento.pk]),
+        )
+        self.assertNotContains(
+            response,
+            reverse("documentos:document_editor", args=[documento.pk]),
+        )
+
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class EnvioDocumentoTests(TestCase):
@@ -227,9 +271,14 @@ class EnvioDocumentoTests(TestCase):
         )
         return envio, destinatario
 
-    def preparar_envio_con_campo(self):
+    def preparar_destinatarios(self):
         self.client.force_login(self.presidente)
-        self.client.get(reverse("documentos:document_editor", args=[self.documento.pk]))
+        return self.client.post(
+            reverse("documentos:committee_recipients", args=[self.documento.pk])
+        )
+
+    def preparar_envio_con_campo(self):
+        self.preparar_destinatarios()
         envio = EnvioDocumento.objects.get(documento=self.documento)
         destinatario = envio.destinatarios.get(usuario=self.miembro)
         CampoFirma.objects.create(
@@ -246,7 +295,10 @@ class EnvioDocumentoTests(TestCase):
         self.preparar_envio_con_campo()
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
-        self.assertRedirects(response, reverse("documentos:list"))
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_detail", args=[self.documento.pk]),
+        )
         envio = EnvioDocumento.objects.get()
         self.assertEqual(envio.documento, self.documento)
         self.assertEqual(envio.remitente, self.presidente)
@@ -260,7 +312,7 @@ class EnvioDocumentoTests(TestCase):
         self.assertFalse(envio.destinatarios.filter(usuario=self.inactivo).exists())
 
     def test_pantallas_reales_muestran_documento_comite_e_integrantes(self):
-        self.client.force_login(self.presidente)
+        self.preparar_destinatarios()
 
         for nombre_ruta in ("committee_recipients", "send_review"):
             response = self.client.get(
@@ -271,6 +323,33 @@ class EnvioDocumentoTests(TestCase):
             self.assertContains(response, str(self.miembro))
             self.assertNotContains(response, str(self.inactivo))
             self.assertNotContains(response, str(self.usuario_externo))
+
+    def test_listado_usa_estado_y_rutas_del_envio_real(self):
+        self.preparar_envio_con_campo()
+        editor_url = reverse("documentos:document_editor", args=[self.documento.pk])
+        recipients_url = reverse("documentos:committee_recipients", args=[self.documento.pk])
+
+        preparation = self.client.get(reverse("documentos:list"))
+        self.assertContains(preparation, "En preparación")
+        self.assertContains(preparation, editor_url)
+
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        sent = self.client.get(reverse("documentos:list"))
+        self.assertContains(sent, "Enviado")
+        self.assertNotContains(sent, recipients_url)
+        self.assertNotContains(sent, editor_url)
+
+    def test_revision_usa_destinatarios_y_campos_preparados(self):
+        _, destinatario = self.preparar_envio_con_campo()
+
+        response = self.client.get(
+            reverse("documentos:send_review", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(destinatario.usuario))
+        self.assertContains(response, "Firma en página 1")
+        self.assertTrue(response.context["listo_para_enviar"])
 
     def test_restriccion_impide_destinatario_duplicado_en_un_envio(self):
         envio, _ = self.crear_envio()
@@ -306,12 +385,27 @@ class EnvioDocumentoTests(TestCase):
         self.comite.save(update_fields=("activo",))
         self.client.force_login(self.presidente)
 
-        response = self.client.get(
-            reverse("documentos:document_editor", args=[self.documento.pk])
+        response = self.client.post(
+            reverse("documentos:committee_recipients", args=[self.documento.pk])
         )
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EnvioDocumento.objects.exists())
+
+    def test_comite_inactivo_no_puede_confirmar_envio(self):
+        envio, destinatario = self.preparar_envio_con_campo()
+        self.comite.activo = False
+        self.comite.save(update_fields=("activo",))
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        envio.refresh_from_db()
+        destinatario.refresh_from_db()
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
 
     def test_envio_rechaza_destinatario_que_ya_no_pertenece_al_comite(self):
         envio, destinatario = self.preparar_envio_con_campo()
@@ -327,6 +421,111 @@ class EnvioDocumentoTests(TestCase):
         destinatario.refresh_from_db()
         self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
         self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
+
+    def test_envio_rechaza_destinatario_desactivado_despues_de_preparar(self):
+        envio, destinatario = self.preparar_envio_con_campo()
+        self.miembro.is_active = False
+        self.miembro.save(update_fields=("is_active",))
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        envio.refresh_from_db()
+        destinatario.refresh_from_db()
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
+
+    def test_get_editor_sin_preparacion_no_crea_envio(self):
+        self.client.force_login(self.presidente)
+
+        response = self.client.get(
+            reverse("documentos:document_editor", args=[self.documento.pk])
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("documentos:committee_recipients", args=[self.documento.pk]),
+        )
+        self.assertFalse(EnvioDocumento.objects.exists())
+
+    def test_get_editor_sin_preparacion_no_crea_destinatarios(self):
+        self.client.force_login(self.presidente)
+        EnvioDocumento.objects.create(
+            documento=self.documento,
+            remitente=self.presidente,
+            estado=EnvioDocumento.Estado.PREPARACION,
+        )
+
+        response = self.client.get(
+            reverse("documentos:document_editor", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(DestinatarioDocumento.objects.exists())
+
+    def test_get_editor_no_elimina_destinatarios_ni_campos(self):
+        self.preparar_destinatarios()
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        destinatario_externo = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.usuario_externo,
+            estado=DestinatarioDocumento.Estado.BORRADOR,
+        )
+        campo = CampoFirma.objects.create(
+            destinatario=destinatario_externo,
+            pagina=1,
+            x=Decimal("0.1"),
+            y=Decimal("0.1"),
+            ancho=Decimal("0.2"),
+            alto=Decimal("0.1"),
+        )
+
+        response = self.client.get(
+            reverse("documentos:document_editor", args=[self.documento.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(DestinatarioDocumento.objects.filter(pk=destinatario_externo.pk).exists())
+        self.assertTrue(CampoFirma.objects.filter(pk=campo.pk).exists())
+
+    def test_recargar_editor_conserva_campo_firma(self):
+        _, destinatario = self.preparar_envio_con_campo()
+        campo = destinatario.campos_firma.get()
+        editor_url = reverse("documentos:document_editor", args=[self.documento.pk])
+
+        self.client.get(editor_url)
+        self.client.get(editor_url)
+
+        campo.refresh_from_db()
+        self.assertEqual(campo.destinatario, destinatario)
+        self.assertEqual(campo.pagina, 1)
+
+    def test_post_destinatarios_crea_y_sincroniza_preparacion(self):
+        response = self.preparar_destinatarios()
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_editor", args=[self.documento.pk]),
+        )
+        self.assertTrue(envio.destinatarios.filter(usuario=self.miembro).exists())
+        self.assertFalse(envio.destinatarios.filter(usuario=self.inactivo).exists())
+
+        destinatario_externo = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.usuario_externo,
+            estado=DestinatarioDocumento.Estado.BORRADOR,
+        )
+
+        response = self.preparar_destinatarios()
+
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_editor", args=[self.documento.pk]),
+        )
+        self.assertTrue(envio.destinatarios.filter(usuario=self.miembro).exists())
+        self.assertFalse(envio.destinatarios.filter(pk=destinatario_externo.pk).exists())
 
     def test_presidente_no_puede_enviar_documento_ajeno(self):
         ajeno = Documento.objects.create(
@@ -360,7 +559,7 @@ class EnvioDocumentoTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("documentos:document_editor", args=[self.documento.pk]),
+            reverse("documentos:committee_recipients", args=[self.documento.pk]),
             fetch_redirect_response=False,
         )
         self.assertFalse(EnvioDocumento.objects.exists())
@@ -369,7 +568,7 @@ class EnvioDocumentoTests(TestCase):
         self.crear_envio()
         self.client.force_login(self.miembro)
 
-        pendientes = self.client.get(reverse("documentos:pending"))
+        pendientes = self.client.get(reverse("documentos:user_pending"))
         propios = self.client.get(reverse("documentos:list"))
 
         self.assertContains(pendientes, "acta.pdf")
@@ -379,7 +578,7 @@ class EnvioDocumentoTests(TestCase):
         self.crear_envio()
         self.client.force_login(self.usuario_externo)
 
-        response = self.client.get(reverse("documentos:pending"))
+        response = self.client.get(reverse("documentos:user_pending"))
 
         self.assertNotContains(response, "acta.pdf")
 
@@ -415,7 +614,7 @@ class EnvioDocumentoTests(TestCase):
             reverse("documentos:committee_recipients", args=[self.documento.pk]),
             reverse("documentos:send_review", args=[self.documento.pk]),
             reverse("documentos:send", args=[self.documento.pk]),
-            reverse("documentos:pending"),
+            reverse("documentos:user_pending"),
             reverse("documentos:received_document", args=[destinatario.pk]),
         )
 
@@ -464,7 +663,9 @@ class CampoFirmaTests(TestCase):
         self.client.force_login(self.propietario)
         self.editor_url = reverse("documentos:document_editor", args=[self.documento.pk])
         self.api_url = reverse("documentos:signature_fields", args=[self.documento.pk])
-        self.client.get(self.editor_url)
+        self.client.post(
+            reverse("documentos:committee_recipients", args=[self.documento.pk])
+        )
         self.destinatario = DestinatarioDocumento.objects.get(
             envio__documento=self.documento,
             usuario=self.destinatario_usuario,
@@ -475,7 +676,9 @@ class CampoFirmaTests(TestCase):
         )
 
         self.client.force_login(self.otro_presidente)
-        self.client.get(reverse("documentos:document_editor", args=[self.otro_documento.pk]))
+        self.client.post(
+            reverse("documentos:committee_recipients", args=[self.otro_documento.pk])
+        )
         self.destinatario_externo = DestinatarioDocumento.objects.get(
             envio__documento=self.otro_documento,
             usuario=self.otro_destinatario_usuario,
@@ -689,7 +892,7 @@ class CampoFirmaTests(TestCase):
     def test_destinatarios_en_preparacion_no_aparecen_en_bandeja(self):
         self.client.force_login(self.destinatario_usuario)
 
-        response = self.client.get(reverse("documentos:pending"))
+        response = self.client.get(reverse("documentos:user_pending"))
 
         self.assertNotContains(response, "campos.pdf")
         self.assertEqual(
@@ -704,7 +907,10 @@ class CampoFirmaTests(TestCase):
 
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
-        self.assertRedirects(response, reverse("documentos:list"))
+        self.assertRedirects(
+            response,
+            reverse("documentos:document_detail", args=[self.documento.pk]),
+        )
         self.destinatario.refresh_from_db()
         self.assertEqual(self.destinatario.envio.estado, EnvioDocumento.Estado.ENVIADO)
         self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
@@ -712,13 +918,15 @@ class CampoFirmaTests(TestCase):
         self.assertEqual(CampoFirma.objects.count(), 2)
 
         self.client.force_login(self.destinatario_usuario)
-        self.assertContains(self.client.get(reverse("documentos:pending")), "campos.pdf")
+        self.assertContains(self.client.get(reverse("documentos:user_pending")), "campos.pdf")
 
     def test_falta_de_campo_mantiene_envio_y_destinatarios_en_borrador(self):
         segundo_usuario = self.crear_usuario(
             "segundo-destinatario", self.comite, self.destinatario_usuario.cargo
         )
-        self.client.get(self.editor_url)
+        self.client.post(
+            reverse("documentos:committee_recipients", args=[self.documento.pk])
+        )
         self.guardar(self.datos_para_todos())
 
         response = self.client.post(
@@ -889,6 +1097,11 @@ class UserDocumentPortalTests(TestCase):
         self.assertContains(response, "Pendiente real.pdf")
         self.assertContains(response, "Documento visto.pdf")
         self.assertNotContains(response, "Documento firmado.pdf")
+
+    def test_legacy_pending_page_excludes_completed_documents(self):
+        response = self.client.get(reverse("documentos:pending"))
+
+        self.assertRedirects(response, reverse("documentos:user_pending"))
 
     def test_completed_filter_uses_completed_status(self):
         response = self.client.get(reverse("documentos:user_completed"))

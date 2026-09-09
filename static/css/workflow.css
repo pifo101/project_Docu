@@ -27,6 +27,8 @@
 .metadata-grid div { display: grid; gap: 6px; }
 .metadata-grid dt { color: #98a2b3; font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .metadata-grid dd { margin: 0; color: #344054; font-size: 11px; font-weight: 600; }
+.metadata-hash { overflow-wrap: anywhere; }
+.detail-empty { margin: 0; padding: 22px; color: var(--color-text-muted); font-size: 10px; }
 .recipient-status-list article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 76px; padding: 14px 21px; align-items: center; gap: 12px; border-bottom: 1px solid #f0f1f3; }
 .recipient-status-list article:last-child { border-bottom: 0; }
 .recipient-status-list article > div { display: grid; min-width: 0; gap: 4px; }
@@ -217,9 +219,10 @@
 .pending-list { display: grid; gap: 12px; }
 .pending-document { display: grid; grid-template-columns: auto minmax(220px, 1fr) 140px 110px auto; padding: 18px 20px; align-items: center; gap: 16px; border: 1px solid var(--color-border); border-radius: 14px; background: white; box-shadow: 0 6px 20px rgba(16,24,40,.035); }
 .pending-document--urgent { border-left: 3px solid var(--color-accent); }
-.pending-document > div, .pending-document time { display: grid; gap: 4px; }
+.pending-document > div, .pending-document time { display: grid; min-width: 0; gap: 4px; }
 .pending-document > div strong, .pending-document time strong { font-size: 11px; }
 .pending-document > div span, .pending-document time small { color: #98a2b3; font-size: 9px; }
+.pending-document > div strong, .pending-document > div span { overflow-wrap: anywhere; }
 .pending-document .primary-action { min-height: 38px; }
 .pending-empty-demo[hidden] { display: none; }
 @media (max-width: 1050px) { .detail-layout, .review-layout, .recipient-layout { grid-template-columns: 1fr; } .activity-card, .send-card, .recipient-context { position: static; } .preparation-grid { grid-template-columns: 1fr; } .recipient-context { grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); } .recipient-summary__content { max-height: 190px; } .pending-document { grid-template-columns: auto minmax(200px,1fr) 120px auto; } .pending-document .status { display: none; } }

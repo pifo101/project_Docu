@@ -95,7 +95,7 @@ def recipient_sign_view(request, pk):
     if request.method == "GET":
         if destinatario.estado != DestinatarioDocumento.Estado.PENDIENTE:
             if destinatario.estado != DestinatarioDocumento.Estado.VISTO:
-                return redirect("documentos:pending")
+                return redirect("documentos:user_pending")
         else:
             destinatario.estado = DestinatarioDocumento.Estado.VISTO
             destinatario.fecha_visualizacion = timezone.now()

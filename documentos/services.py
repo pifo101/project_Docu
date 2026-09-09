@@ -1,12 +1,35 @@
 from django.db.models import Count, Q
 
-from .models import DestinatarioDocumento, EnvioDocumento
+from .models import DestinatarioDocumento, Documento, EnvioDocumento
 
 
 PENDING_RECIPIENT_STATES = (
     DestinatarioDocumento.Estado.PENDIENTE,
     DestinatarioDocumento.Estado.VISTO,
 )
+
+
+def sender_documents_context(user):
+    documents = (
+        Documento.objects.filter(propietario=user)
+        .select_related("envio")
+        .prefetch_related("envio__destinatarios")
+    )
+    return {
+        "owned_documents": documents,
+        "owned_document_count": documents.count(),
+        "sent_document_count": documents.filter(
+            envio__estado=EnvioDocumento.Estado.ENVIADO,
+        ).count(),
+        "waiting_signature_count": DestinatarioDocumento.objects.filter(
+            envio__remitente=user,
+            envio__estado=EnvioDocumento.Estado.ENVIADO,
+            estado__in=PENDING_RECIPIENT_STATES,
+        ).count(),
+        "recipient_pending_count": recipient_documents_queryset(user).filter(
+            estado__in=PENDING_RECIPIENT_STATES,
+        ).count(),
+    }
 
 
 def recipient_documents_queryset(user):

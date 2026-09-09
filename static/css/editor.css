@@ -943,8 +943,8 @@
     .editor-recipient { margin-top: 12px; }
 
     .field-properties__content {
-        grid-template-columns: auto minmax(150px, 1fr) auto;
-        align-items: end;
+        grid-template-columns: 1fr;
+        align-items: stretch;
     }
 
     .field-properties__empty {
@@ -957,7 +957,8 @@
     }
 
     .property-delete {
-        align-self: end;
+        width: 100%;
+        align-self: stretch;
     }
 
     .field-tool {

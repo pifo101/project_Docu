@@ -29,7 +29,7 @@
 }
 
 .documents-panel {
-    overflow: visible;
+    overflow: hidden;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     background: white;
@@ -164,7 +164,7 @@
 .documents-table__header,
 .document-entry {
     display: grid;
-    grid-template-columns: minmax(270px, 1.4fr) minmax(220px, 1fr) 140px 100px 36px;
+    grid-template-columns: minmax(240px, 1.4fr) minmax(140px, .8fr) 125px 100px minmax(150px, .7fr);
     align-items: center;
     gap: 18px;
 }
@@ -209,7 +209,7 @@
 }
 
 .document-entry__name,
-.document-entry__participants > span,
+.document-entry__participants>span,
 .document-entry time {
     display: grid;
     min-width: 0;
@@ -227,7 +227,7 @@
     font-size: 11px;
 }
 
-.document-entry__name > strong {
+.document-entry__name>strong {
     font-size: 12px;
 }
 
@@ -262,8 +262,15 @@
 }
 
 .document-actions {
-    position: relative;
+    display: grid;
+    min-width: 0;
+    justify-items: start;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
 }
+
+.documents-list-empty { padding: 24px; color: var(--color-text-muted); }
 
 .document-actions__menu {
     position: absolute;
@@ -379,7 +386,9 @@
     font-weight: 600;
 }
 
-.documents-feedback[hidden] { display: none; }
+.documents-feedback[hidden] {
+    display: none;
+}
 
 @media (min-width: 821px) {
     .documents-page .dashboard-header .new-document-button {
@@ -394,25 +403,20 @@
 @media (max-width: 1120px) {
     .documents-table__header,
     .document-entry {
-        grid-template-columns: minmax(250px, 1.4fr) minmax(180px, 1fr) 120px 90px 30px;
+        grid-template-columns: minmax(220px, 1.4fr) minmax(120px, .7fr) 110px 90px minmax(130px, .7fr);
         gap: 12px;
     }
 }
 
 @media (max-width: 900px) {
-    .documents-table__header {
-        grid-template-columns: minmax(250px, 1.5fr) minmax(180px, 1fr) 90px 30px;
-    }
-
-    .documents-table__header span:nth-child(3) {
-        display: none;
-    }
+    .documents-table__header { display: none; }
 
     .document-entry {
-        grid-template-columns: minmax(250px, 1.5fr) minmax(180px, 1fr) 90px 30px;
+        grid-template-columns: minmax(0, 1fr) auto minmax(130px, auto);
     }
 
-    .document-entry time {
+    .document-entry time,
+    .document-entry__participants {
         display: none;
     }
 }
@@ -471,6 +475,7 @@
     }
 
     .document-entry__participants {
+        display: flex;
         grid-column: 1;
         grid-row: 2;
         padding-left: 49px;
@@ -480,7 +485,7 @@
         display: none;
     }
 
-    .document-entry__participants > span {
+    .document-entry__participants>span {
         gap: 2px;
     }
 

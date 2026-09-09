@@ -10,7 +10,7 @@
         </button>
     </div>
 
-    <form class="upload-form" method="post" action="{% url 'documentos:upload' %}" enctype="multipart/form-data">
+    <form class="upload-form" method="post" action="{% url 'documentos:upload' %}" enctype="multipart/form-data" data-max-file-size="{{ documento_max_file_size|default:20971520 }}">
         {% csrf_token %}
         <input class="upload-input" id="pdf-file" name="archivo" type="file" accept="application/pdf,.pdf" aria-describedby="upload-rules upload-error">
         <label class="drop-zone" for="pdf-file" tabindex="0">

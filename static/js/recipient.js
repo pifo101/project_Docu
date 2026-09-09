@@ -15,6 +15,7 @@
     const signatureMethod = document.querySelector("[data-signature-method]");
     const signatureTabs = Array.from(document.querySelectorAll("[data-signature-tab]"));
     const nextHelp = document.querySelector("[data-next-help]");
+    const nextFieldButton = document.querySelector("[data-next-field]");
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
@@ -112,13 +113,32 @@
         recipientPages.setAttribute("aria-busy", "false");
         placeSignatureField();
         focusAssignedPage();
+        if (nextFieldButton) nextFieldButton.disabled = false;
+        if (nextHelp) nextHelp.textContent = "Dibuja tu firma para continuar.";
+    }
+
+    function showDocumentError() {
+        if (!recipientPages) return;
+        const message = document.createElement("div");
+        message.className = "recipient-document-error";
+        message.setAttribute("role", "alert");
+        message.innerHTML = "<strong>No se pudo mostrar el PDF.</strong><span>Recarga la página antes de firmar. No se utilizará contenido de demostración para un documento real.</span>";
+        recipientPages.replaceChildren(message);
+        recipientPages.setAttribute("aria-busy", "false");
+        if (recipientPageStatus) recipientPageStatus.textContent = "PDF no disponible";
+        if (nextHelp) nextHelp.textContent = "La firma está bloqueada hasta que el PDF pueda mostrarse.";
+        if (nextFieldButton) nextFieldButton.disabled = true;
+        fields.forEach((field) => { field.hidden = true; });
+        if (consentPanel) consentPanel.hidden = true;
     }
 
     async function renderRecipientDocument() {
-        if (!recipientPages || !window.pdfjsLib) return drawMockDocument();
+        if (!recipientPages) return;
+        const demo = recipientViewer?.dataset.demo === "true";
+        if (!window.pdfjsLib) return demo ? drawMockDocument() : showDocumentError();
         try {
             const pdfUrl = recipientViewer?.dataset.pdfUrl;
-            if (!pdfUrl) return drawMockDocument();
+            if (!pdfUrl) return demo ? drawMockDocument() : showDocumentError();
             window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
             if (!recipientPdf) recipientPdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
             const currentVersion = ++recipientRenderVersion;
@@ -151,9 +171,12 @@
             if (recipientPageStatus) recipientPageStatus.textContent = `${recipientPdf.numPages} páginas`;
             placeSignatureField();
             focusAssignedPage();
+            if (nextFieldButton) nextFieldButton.disabled = false;
+            if (nextHelp) nextHelp.textContent = "Elige una firma guardada o dibuja una nueva.";
         } catch (error) {
-            console.warn("No se pudo mostrar el PDF; se utilizará la vista de demostración.", error);
-            drawMockDocument();
+            console.warn("No se pudo mostrar el PDF.", error);
+            if (demo) drawMockDocument();
+            else showDocumentError();
         }
     }
 
@@ -253,7 +276,7 @@
         });
     });
 
-    document.querySelector("[data-next-field]")?.addEventListener("click", () => {
+    nextFieldButton?.addEventListener("click", () => {
         const nextField = fields.find((field) => !field.classList.contains("field-complete"));
         if (nextField) {
             nextField.scrollIntoView({ behavior: "smooth", block: "center" });
