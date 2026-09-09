@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -22,8 +22,7 @@ from usuarios.models import Cargo
 from .forms import DocumentoForm
 from .models import CampoFirma, DestinatarioDocumento, Documento, DocumentoResultado, EnvioDocumento
 from .services import (
-    ResultadoPDFError,
-    generar_resultado_si_completo,
+    document_tracking_context,
     recipient_documents_context,
     sender_documents_context,
 )
@@ -252,30 +251,20 @@ def upload_document_view(request):
 
 @login_required
 def owned_document_detail_view(request, pk):
+    tracking_recipients = DestinatarioDocumento.objects.select_related(
+        "usuario",
+        "firma",
+    ).order_by("usuario__first_name", "usuario__last_name", "usuario__email")
     documento = get_object_or_404(
-        Documento.objects.prefetch_related("envio__destinatarios__usuario"),
+        Documento.objects.select_related("envio").prefetch_related(
+            Prefetch("envio__destinatarios", queryset=tracking_recipients)
+        ),
         pk=pk,
         propietario=request.user,
     )
     context = sender_documents_context(request.user)
     context["documento"] = documento
-    if hasattr(documento, "envio"):
-        context["total_destinatarios"] = documento.envio.destinatarios.count()
-        context["total_firmados"] = documento.envio.destinatarios.filter(
-            estado=DestinatarioDocumento.Estado.FIRMADO
-        ).count()
-        if (
-            context["total_destinatarios"]
-            and context["total_firmados"] == context["total_destinatarios"]
-            and not DocumentoResultado.objects.filter(envio=documento.envio).exists()
-        ):
-            try:
-                generar_resultado_si_completo(documento.envio.pk)
-            except ResultadoPDFError:
-                messages.warning(request, "No se pudo generar el PDF resultante.")
-        context["resultado_disponible"] = DocumentoResultado.objects.filter(
-            envio=documento.envio
-        ).exists()
+    context.update(document_tracking_context(documento))
     return render(request, "documentos/document_detail.html", context)
 
 
