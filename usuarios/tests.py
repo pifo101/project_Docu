@@ -1,8 +1,13 @@
+from importlib import import_module
+from types import SimpleNamespace
+
+from django.apps import apps
 from django.contrib.auth import authenticate, get_user_model
-from django.db import IntegrityError, transaction
+from django.db import connection, IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
+from .constants import OFFICIAL_COMMITTEE_NAMES
 from .models import Cargo, Comite
 
 
@@ -122,11 +127,29 @@ class RegistroUsuarioTests(TestCase):
     def test_selector_incluye_comites_iniciales(self):
         response = self.client.get(reverse("usuarios:register"))
 
-        self.assertContains(response, "Recursos Humanos")
-        self.assertContains(response, "Tecnología")
-        self.assertContains(response, "Dirección Ejecutiva")
-        self.assertContains(response, "Secretaría")
-        self.assertContains(response, "Finanzas")
+        for nombre in OFFICIAL_COMMITTEE_NAMES:
+            self.assertContains(response, nombre)
+
+    def test_selector_excluye_comites_inactivos(self):
+        inactivo = Comite.objects.create(nombre="Comité inactivo", activo=False)
+
+        response = self.client.get(reverse("usuarios:register"))
+
+        self.assertNotContains(response, inactivo.nombre)
+
+    def test_registro_rechaza_comite_inactivo(self):
+        inactivo = Comite.objects.create(nombre="Comité deshabilitado", activo=False)
+
+        response = self.client.post(
+            reverse("usuarios:register"),
+            self.datos_validos(comite=inactivo.pk),
+        )
+
+        self.assertFormError(
+            response.context["form"],
+            "comite",
+            "Escoja una opción válida. Esa opción no está entre las disponibles.",
+        )
 
     def test_rechaza_gmail(self):
         response = self.client.post(
@@ -363,4 +386,103 @@ class EstructuraOrganizacionalTests(TestCase):
         self.assertEqual(
             self.comite_a.usuarios.filter(cargo=Cargo.Codigo.MIEMBRO).count(),
             3,
+        )
+
+
+class MigracionComitesOficialesTests(TestCase):
+    password = "ClaveSegura!2026"
+
+    def ejecutar_migracion(self):
+        migration = import_module(
+            "usuarios.migrations.0006_configurar_comites_oficiales"
+        )
+        migration.configurar_comites_oficiales(
+            apps,
+            SimpleNamespace(connection=connection),
+        )
+
+    def test_consolida_historicos_y_es_idempotente(self):
+        Comite.objects.all().delete()
+        liderazgo = Comite.objects.create(
+            nombre=OFFICIAL_COMMITTEE_NAMES[0],
+            activo=False,
+        )
+        comunicacion = Comite.objects.create(nombre=OFFICIAL_COMMITTEE_NAMES[1])
+        trabajo_equipo = Comite.objects.create(nombre=OFFICIAL_COMMITTEE_NAMES[2])
+        recursos_humanos = Comite.objects.create(nombre="Recursos Humanos")
+        tecnologia = Comite.objects.create(nombre="Tecnología")
+        finanzas = Comite.objects.create(nombre="Finanzas")
+        direccion = Comite.objects.create(nombre="Dirección Ejecutiva")
+        secretaria = Comite.objects.create(nombre="Secretaría")
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        usuarios = {
+            email: get_user_model().objects.create_user(
+                email=email,
+                password=self.password,
+                comite=comite,
+                cargo=cargo,
+            )
+            for email, comite, cargo in (
+                ("usuario.ejemplo@adicla.org.gt", tecnologia, miembro),
+                ("usuario.prueba@adicla.org.gt", tecnologia, miembro),
+                ("admin.ejemplo@adicla.org.gt", tecnologia, presidente),
+                ("usuario.prueba2@adicla.org.gt", finanzas, miembro),
+            )
+        }
+
+        self.ejecutar_migracion()
+        self.ejecutar_migracion()
+
+        self.assertEqual(
+            Comite.objects.filter(nombre__in=OFFICIAL_COMMITTEE_NAMES).count(),
+            3,
+        )
+        self.assertEqual(
+            set(Comite.objects.filter(activo=True).values_list("nombre", flat=True)),
+            set(OFFICIAL_COMMITTEE_NAMES),
+        )
+        self.assertEqual(
+            Comite.objects.get(nombre="Recursos Humanos").activo,
+            False,
+        )
+        self.assertFalse(direccion.__class__.objects.get(pk=direccion.pk).activo)
+        self.assertFalse(secretaria.__class__.objects.get(pk=secretaria.pk).activo)
+        self.assertEqual(liderazgo.usuarios.count(), 0)
+
+        for usuario in usuarios.values():
+            usuario.refresh_from_db()
+        self.assertEqual(usuarios["usuario.ejemplo@adicla.org.gt"].comite, comunicacion)
+        self.assertEqual(usuarios["usuario.prueba@adicla.org.gt"].comite, comunicacion)
+        self.assertEqual(usuarios["admin.ejemplo@adicla.org.gt"].comite, comunicacion)
+        self.assertEqual(
+            usuarios["admin.ejemplo@adicla.org.gt"].cargo_id,
+            Cargo.Codigo.PRESIDENTE,
+        )
+        self.assertEqual(
+            usuarios["usuario.prueba2@adicla.org.gt"].comite,
+            trabajo_equipo,
+        )
+        self.assertFalse(recursos_humanos.__class__.objects.get(pk=recursos_humanos.pk).activo)
+        self.assertFalse(tecnologia.__class__.objects.get(pk=tecnologia.pk).activo)
+        self.assertFalse(finanzas.__class__.objects.get(pk=finanzas.pk).activo)
+
+    def test_reutiliza_registro_historico_si_el_oficial_no_existe(self):
+        Comite.objects.all().delete()
+        tecnologia = Comite.objects.create(nombre="Tecnología")
+
+        self.ejecutar_migracion()
+
+        comunicacion = Comite.objects.get(nombre=OFFICIAL_COMMITTEE_NAMES[1])
+        self.assertEqual(comunicacion.pk, tecnologia.pk)
+        self.assertTrue(comunicacion.activo)
+
+    def test_crea_oficiales_si_no_existen(self):
+        Comite.objects.all().delete()
+
+        self.ejecutar_migracion()
+
+        self.assertEqual(
+            set(Comite.objects.filter(activo=True).values_list("nombre", flat=True)),
+            set(OFFICIAL_COMMITTEE_NAMES),
         )

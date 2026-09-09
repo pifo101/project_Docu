@@ -18,14 +18,17 @@ from usuarios.models import Cargo
 from .forms import DocumentoForm
 from .models import CampoFirma, DestinatarioDocumento, Documento, EnvioDocumento
 from .services import (
-    PENDING_RECIPIENT_STATES,
     recipient_documents_context,
     sender_documents_context,
 )
 
 
 def _documento_de_presidente(request, pk):
-    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE or not request.user.comite_id:
+    if (
+        request.user.cargo_id != Cargo.Codigo.PRESIDENTE
+        or not request.user.comite_id
+        or not request.user.comite.activo
+    ):
         raise PermissionDenied
     return get_object_or_404(Documento, pk=pk, propietario=request.user)
 
@@ -110,9 +113,13 @@ def documents_view(request):
 
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def committee_recipients_view(request, pk):
     documento = _documento_de_presidente(request, pk)
     integrantes = _integrantes_del_comite(request)
+    if request.method == "POST":
+        _preparar_envio(documento, request)
+        return redirect("documentos:document_editor", pk=documento.pk)
     return render(request, "documentos/recipients.html", {
         "documento": documento,
         "comite": request.user.comite,
@@ -126,7 +133,7 @@ def send_review_view(request, pk):
     envio = EnvioDocumento.objects.filter(documento=documento).first()
     if envio is None:
         messages.info(request, "Primero asigna un campo de firma a cada destinatario.")
-        return redirect("documentos:document_editor", pk=documento.pk)
+        return redirect("documentos:committee_recipients", pk=documento.pk)
     if envio.estado == EnvioDocumento.Estado.ENVIADO:
         messages.info(request, "Este documento ya fue enviado al comité.")
         return redirect("documentos:document_detail", pk=documento.pk)
@@ -159,7 +166,7 @@ def send_document_view(request, pk):
         )
         if envio is None:
             messages.error(request, "Primero prepara el envío y asigna los campos de firma.")
-            return redirect("documentos:document_editor", pk=documento.pk)
+            return redirect("documentos:committee_recipients", pk=documento.pk)
         if envio.remitente_id != request.user.pk:
             raise PermissionDenied
         if envio.estado == EnvioDocumento.Estado.ENVIADO:
@@ -167,7 +174,9 @@ def send_document_view(request, pk):
             return redirect("documentos:document_detail", pk=documento.pk)
 
         destinatarios = list(
-            envio.destinatarios.select_for_update().select_related("usuario")
+            envio.destinatarios.select_for_update().select_related(
+                "usuario__comite"
+            )
         )
         if not destinatarios:
             messages.error(request, "El envío no tiene destinatarios preparados.")
@@ -178,6 +187,13 @@ def send_document_view(request, pk):
         ):
             messages.error(request, "Los destinatarios no están en un estado válido para enviar.")
             return redirect("documentos:send_review", pk=documento.pk)
+        if any(
+            not destinatario.usuario.is_active
+            or destinatario.usuario.comite_id != request.user.comite_id
+            or not destinatario.usuario.comite.activo
+            for destinatario in destinatarios
+        ):
+            raise PermissionDenied
 
         destinatarios_con_campo = set(
             CampoFirma.objects.filter(destinatario__envio=envio).values_list(
@@ -285,7 +301,15 @@ def editor_view(request):
 @login_required
 def document_editor_view(request, pk):
     documento = _documento_de_presidente(request, pk)
-    envio = _preparar_envio(documento, request)
+    envio = EnvioDocumento.objects.filter(documento=documento).first()
+    if envio is None:
+        messages.info(request, "Confirma los destinatarios antes de abrir el editor.")
+        return redirect("documentos:committee_recipients", pk=documento.pk)
+    if (
+        envio.estado != EnvioDocumento.Estado.PREPARACION
+        or envio.remitente_id != request.user.pk
+    ):
+        raise PermissionDenied
     destinatarios = list(envio.destinatarios.select_related("usuario").order_by(
         "usuario__first_name", "usuario__last_name", "usuario__email"
     ))
@@ -424,18 +448,7 @@ def review_view(request):
 
 @login_required
 def pending_view(request):
-    destinatarios = (
-        DestinatarioDocumento.objects
-        .filter(
-            usuario=request.user,
-            envio__estado=EnvioDocumento.Estado.ENVIADO,
-            estado__in=PENDING_RECIPIENT_STATES,
-        )
-        .select_related("envio__documento", "envio__remitente")
-    )
-    context = sender_documents_context(request.user)
-    context["destinatarios"] = destinatarios
-    return render(request, "documentos/pending.html", context)
+    return redirect("documentos:user_pending")
 
 
 @login_required

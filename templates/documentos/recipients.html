@@ -56,7 +56,8 @@
             </aside>
 
             {% if documento %}
-            <form class="recipient-form workflow-card" method="get" action="{% url 'documentos:document_editor' documento.pk %}">
+            <form class="recipient-form workflow-card" method="post" action="{% url 'documentos:committee_recipients' documento.pk %}">
+                {% csrf_token %}
                 <fieldset class="recipient-modes">
                     <legend>Tipo de destinatario</legend>
                     <div class="recipient-mode-grid">

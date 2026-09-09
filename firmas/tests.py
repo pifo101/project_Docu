@@ -666,7 +666,7 @@ class FirmaFlujoTests(TestCase):
 
     def test_firmado_sale_de_pendientes_y_no_ofrece_firmar_de_nuevo(self):
         self._post()
-        pending_response = self.client.get(reverse("documentos:pending"))
+        pending_response = self.client.get(reverse("documentos:user_pending"))
         completed_response = self.client.get(reverse("documentos:user_completed"))
 
         self.assertNotContains(pending_response, self.documento.nombre_original)

@@ -2,8 +2,10 @@ from django import forms
 from django.contrib.auth import authenticate, password_validation
 from django.contrib.auth.forms import UserChangeForm
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
 from .models import (
+    Comite,
     Usuario,
     normalize_institutional_email,
     validate_institutional_email,
@@ -44,6 +46,10 @@ class RegistroUsuarioForm(forms.ModelForm):
         widgets = {
             "email": forms.EmailInput(attrs={"autocomplete": "email"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["comite"].queryset = Comite.objects.filter(activo=True)
 
     def clean_email(self):
         email = normalize_institutional_email(self.cleaned_data["email"])
@@ -126,3 +132,12 @@ class UsuarioAdminChangeForm(UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = Usuario
         fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        comites = Comite.objects.filter(activo=True)
+        if self.instance and self.instance.comite_id:
+            comites = Comite.objects.filter(
+                Q(activo=True) | Q(pk=self.instance.comite_id)
+            )
+        self.fields["comite"].queryset = comites

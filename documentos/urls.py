@@ -30,8 +30,9 @@ urlpatterns = [
     path("<int:pk>/enviar/", view.send_document_view, name="send"),
     path("recibidos/<int:pk>/ver/", view.received_document_view, name="received_document"),
     path("pendientes/", view.pending_view, name="pending"),
-    path("nuevo/destinatarios/", view.recipients_view, name="recipients"),
-    path("editor/", view.editor_view, name="editor"),
-    path("revisar/", view.review_view, name="review"),
-    path("contrato-servicios-2026/", view.document_detail_view, name="detail"),
+    # Prototipos aislados: ninguna navegación del flujo real debe depender de estas rutas.
+    path("demo/nuevo/destinatarios/", view.recipients_view, name="recipients"),
+    path("demo/editor/", view.editor_view, name="editor"),
+    path("demo/revisar/", view.review_view, name="review"),
+    path("demo/contrato-servicios-2026/", view.document_detail_view, name="detail"),
 ]
