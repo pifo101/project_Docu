@@ -74,7 +74,7 @@
                         <span>Tipo</span>
                         <strong data-property-type></strong>
                     </div>
-                    <label class="property-recipient"><span>Destinatario</span><select data-property-recipient{% if not documento %} hidden{% endif %}>{% for destinatario in destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.usuario }}{% if destinatario.usuario_id == request.user.id %} (Presidente, firma primero){% endif %}</option>{% endfor %}</select><strong data-property-recipient-label{% if documento %} hidden{% endif %}>Destinatarios seleccionados</strong></label>
+                    <label class="property-recipient"><span>Destinatario</span><select data-property-recipient{% if not documento %} hidden{% endif %}>{% for destinatario in destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.usuario }}{% if destinatario.usuario_id == request.user.id %} (Presidente){% endif %}</option>{% endfor %}</select><strong data-property-recipient-label{% if documento %} hidden{% endif %}>Destinatarios seleccionados</strong></label>
                     <label class="property-switch">
                         <input type="checkbox" data-property-required{% if documento %} checked disabled{% endif %}>
                         <span aria-hidden="true"></span>

@@ -17,6 +17,7 @@
     const nextHelp = document.querySelector("[data-next-help]");
     const nextFieldButton = document.querySelector("[data-next-field]");
     const readonly = recipientViewer?.dataset.readonly === "true";
+    const protectedViewer = recipientViewer?.dataset.protected === "true";
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
@@ -49,6 +50,7 @@
         pageElement.style.width = `${width}px`;
         pageElement.style.height = `${height}px`;
         canvas.className = "recipient-pdf-canvas";
+        canvas.draggable = false;
         canvas.setAttribute("role", "img");
         canvas.setAttribute("aria-label", `Página ${pageNumber} de ${totalPages}`);
         label.className = "recipient-page-number";
@@ -337,6 +339,23 @@
             if (feedback) feedback.textContent = button.dataset.completedAction;
         });
     });
+
+    if (protectedViewer) {
+        recipientViewer.addEventListener("contextmenu", (event) => event.preventDefault());
+        recipientViewer.addEventListener("copy", (event) => event.preventDefault());
+        recipientViewer.addEventListener("dragstart", (event) => event.preventDefault());
+        recipientViewer.addEventListener("pointerdown", (event) => {
+            if (event.target.closest(".recipient-document-page, .recipient-pdf-canvas")) {
+                recipientViewer.focus({ preventScroll: true });
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            const shortcut = (event.ctrlKey || event.metaKey) && ["s", "p"].includes(
+                event.key.toLowerCase(),
+            );
+            if (shortcut) event.preventDefault();
+        });
+    }
 
     const completedSigner = document.querySelector("[data-completed-signer]");
     if (completedSigner) {

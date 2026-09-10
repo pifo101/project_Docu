@@ -357,7 +357,7 @@ class EnvioDocumentoTests(TestCase):
             )
         return envio, destinatario
 
-    def test_presidente_envia_documento_incluyendose_como_primer_firmante(self):
+    def test_presidente_envia_documento_incluyendose_como_firmante(self):
         self.preparar_envio_con_campo()
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
@@ -417,7 +417,9 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(destinatario.usuario))
         self.assertContains(response, "1 campo de firma")
-        self.assertContains(response, "Firma primero")
+        self.assertContains(response, "Presidente")
+        self.assertContains(response, "sin un orden obligatorio")
+        self.assertNotContains(response, "Firma primero")
         self.assertTrue(response.context["listo_para_enviar"])
 
     def test_restriccion_impide_destinatario_duplicado_en_un_envio(self):

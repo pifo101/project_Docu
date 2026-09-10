@@ -24,29 +24,6 @@ def _intentar_generar_resultado(request, envio_id):
         return None
 
 
-def _remitente_debe_firmar_primero(destinatario, bloquear=False):
-    if destinatario.usuario_id == destinatario.envio.remitente_id:
-        return False
-    remitente = DestinatarioDocumento.objects.filter(
-        envio_id=destinatario.envio_id,
-        usuario_id=destinatario.envio.remitente_id,
-    )
-    if bloquear:
-        remitente = remitente.select_for_update()
-    remitente = remitente.first()
-    return remitente is not None and (
-        remitente.estado != DestinatarioDocumento.Estado.FIRMADO
-        or not Firma.objects.filter(destinatario=remitente).exists()
-    )
-
-
-def _respuesta_espera_remitente():
-    return HttpResponse(
-        "El presidente remitente debe completar su firma antes que los demás destinatarios.",
-        status=409,
-    )
-
-
 def _render_documento_destinatario(
     request,
     destinatario,
@@ -54,7 +31,6 @@ def _render_documento_destinatario(
     form=None,
     firma_perfil=None,
     readonly=False,
-    waiting_for_president=False,
     already_signed=False,
     show_result=False,
 ):
@@ -68,7 +44,7 @@ def _render_documento_destinatario(
         "form": form,
         "firma_perfil": firma_perfil,
         "readonly": readonly,
-        "waiting_for_president": waiting_for_president,
+        "protected_viewer": destinatario.usuario_id != destinatario.envio.remitente_id,
         "already_signed": already_signed,
         "show_result": show_result,
         "pdf_view_url": pdf_view_url,
@@ -173,17 +149,6 @@ def recipient_sign_view(request, pk):
             )
         messages.info(request, "Ya registraste tu firma para este documento.")
         return redirect("documentos:user_completed")
-    if _remitente_debe_firmar_primero(destinatario):
-        if request.method == "POST":
-            return _respuesta_espera_remitente()
-        return _render_documento_destinatario(
-            request,
-            destinatario,
-            campos_firma,
-            readonly=True,
-            waiting_for_president=True,
-        )
-
     firma_perfil = FirmaPerfil.objects.filter(usuario=request.user).first()
     if request.method == "GET":
         with transaction.atomic():
@@ -236,8 +201,6 @@ def recipient_sign_view(request, pk):
                     ).exists():
                         messages.info(request, "Ya registraste tu firma para este documento.")
                         return redirect("documentos:user_completed")
-                    if _remitente_debe_firmar_primero(bloqueado, bloquear=True):
-                        return _respuesta_espera_remitente()
                     if not bloqueado.campos_firma.exists():
                         form.add_error(
                             None,

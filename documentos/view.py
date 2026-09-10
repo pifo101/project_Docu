@@ -423,7 +423,7 @@ def document_editor_view(request, pk):
             {
                 "id": destinatario.pk,
                 "name": (
-                    f"{destinatario.usuario} (Presidente, firma primero)"
+                    f"{destinatario.usuario} (Presidente)"
                     if destinatario.usuario_id == envio.remitente_id
                     else str(destinatario.usuario)
                 ),
