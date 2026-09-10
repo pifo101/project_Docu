@@ -79,18 +79,18 @@ def _cargar_destinatarios_validados(envio, page_count):
     firmas_por_pagina = {}
     for destinatario in destinatarios:
         campos = list(destinatario.campos_firma.all())
-        if len(campos) != 1:
-            raise ResultadoPDFError("Cada destinatario debe tener exactamente un campo de firma.")
+        if not campos:
+            raise ResultadoPDFError("Cada destinatario debe tener al menos un campo de firma.")
         try:
             firma = destinatario.firma
         except Exception as error:
             raise ResultadoPDFError("Cada destinatario debe tener exactamente una firma.") from error
-        campo = campos[0]
-        if not 1 <= campo.pagina <= page_count:
-            raise ResultadoPDFError("Un campo de firma apunta a una página inexistente.")
         if firma.formato not in FORMATOS_FIRMA_SOPORTADOS:
             raise ResultadoPDFError("Una firma utiliza un formato no soportado.")
-        firmas_por_pagina.setdefault(campo.pagina - 1, []).append((campo, firma))
+        for campo in campos:
+            if not 1 <= campo.pagina <= page_count:
+                raise ResultadoPDFError("Un campo de firma apunta a una página inexistente.")
+            firmas_por_pagina.setdefault(campo.pagina - 1, []).append((campo, firma))
     return firmas_por_pagina
 
 

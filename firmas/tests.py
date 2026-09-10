@@ -16,7 +16,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from documentos.models import (
     CampoFirma,
@@ -25,7 +25,7 @@ from documentos.models import (
     DocumentoResultado,
     EnvioDocumento,
 )
-from documentos.services import ResultadoPDFError
+from documentos.services import ResultadoPDFError, document_tracking_context
 from usuarios.models import Cargo, Comite
 
 from .forms import FIRMA_MAX_BYTES
@@ -411,8 +411,8 @@ class FirmaFlujoTests(TestCase):
 
         response = self.client.get(self.url)
 
-        self.assertEqual(response.context["campo_firma_data"]["page"], 3)
-        self.assertContains(response, 'id="recipient-signature-field"')
+        self.assertEqual(response.context["campos_firma_data"][0]["page"], 3)
+        self.assertContains(response, 'id="recipient-signature-fields"')
         self.assertContains(response, '"page": 3')
 
     def test_parametro_campo_ajeno_no_cambia_campo_autorizado(self):
@@ -816,9 +816,9 @@ class FirmaFlujoTests(TestCase):
         self.assertIn("grid-template-columns: repeat(2,minmax(0,1fr))", css)
         self.assertNotIn("getPage(1)", javascript)
         self.assertIn("pageNumber <= recipientPdf.numPages", javascript)
-        self.assertIn("signatureFieldData.page", javascript)
-        self.assertIn("signatureFieldData.x * 100", javascript)
-        self.assertIn("signatureFieldData.y * 100", javascript)
+        self.assertIn("signatureFieldsData[index]", javascript)
+        self.assertIn("fieldData.x * 100", javascript)
+        self.assertIn("fieldData.y * 100", javascript)
         self.assertIn('window.addEventListener("resize", scheduleRecipientResize)', javascript)
 
     def test_metodo_perfil_copia_imagen_y_finaliza_documento(self):
@@ -939,3 +939,154 @@ class FirmaFlujoTests(TestCase):
         self.solicitud.refresh_from_db()
         self.assertEqual(bytes(historica.imagen), original)
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class PresidentePrimerFirmanteTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.comite = Comite.objects.create(nombre="Comite presidente firmante")
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.presidente = cls._usuario("presidente-primero", presidente)
+        cls.miembro = cls._usuario("miembro-despues", miembro)
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    @classmethod
+    def _usuario(cls, nombre, cargo):
+        return get_user_model().objects.create_user(
+            email=f"{nombre}@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name=nombre,
+            last_name="Prueba",
+            comite=cls.comite,
+            cargo=cargo,
+        )
+
+    def setUp(self):
+        output = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        writer.write(output)
+        self.documento = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=SimpleUploadedFile(
+                "presidente-primero.pdf", output.getvalue(), content_type="application/pdf"
+            ),
+            nombre_original="presidente-primero.pdf",
+        )
+        self.envio = EnvioDocumento.objects.create(
+            documento=self.documento,
+            remitente=self.presidente,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        self.asignacion_presidente = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.presidente,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+        )
+        self.asignacion_miembro = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.miembro,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+        )
+        self._campo(self.asignacion_presidente, "0.10", "0.10")
+        self._campo(self.asignacion_presidente, "0.10", "0.30")
+        self._campo(self.asignacion_miembro, "0.55", "0.10")
+
+    def _campo(self, destinatario, x, y):
+        return CampoFirma.objects.create(
+            destinatario=destinatario,
+            pagina=1,
+            x=Decimal(x),
+            y=Decimal(y),
+            ancho=Decimal("0.25"),
+            alto=Decimal("0.10"),
+        )
+
+    def _firmar(self, usuario, destinatario):
+        self.client.force_login(usuario)
+        return self.client.post(
+            reverse("firmas:recipient_sign", args=[destinatario.pk]),
+            {
+                "metodo": Firma.Metodo.DIBUJADA,
+                "firma": png_data_url(),
+                "consentimiento": "1",
+            },
+        )
+
+    def test_presidente_firma_primero_y_habilita_flujo_completo(self):
+        miembro_url = reverse(
+            "firmas:recipient_sign", args=[self.asignacion_miembro.pk]
+        )
+        self.client.force_login(self.miembro)
+
+        self.assertEqual(self.client.get(miembro_url).status_code, 409)
+        bloqueado = self._firmar(self.miembro, self.asignacion_miembro)
+        self.assertEqual(bloqueado.status_code, 409)
+        self.assertContains(bloqueado, "presidente remitente", status_code=409)
+        self.assertFalse(Firma.objects.exists())
+
+        self.client.force_login(self.presidente)
+        vista_presidente = self.client.get(
+            reverse("firmas:recipient_sign", args=[self.asignacion_presidente.pk])
+        )
+        self.assertEqual(vista_presidente.status_code, 200)
+        self.assertEqual(len(vista_presidente.context["campos_firma_data"]), 2)
+        self.assertContains(vista_presidente, 'id="recipient-signature-fields"')
+
+        firmado_presidente = self._firmar(
+            self.presidente, self.asignacion_presidente
+        )
+        self.assertRedirects(firmado_presidente, reverse("documentos:user_completed"))
+        self.asignacion_presidente.refresh_from_db()
+        firma_presidente = Firma.objects.get(destinatario=self.asignacion_presidente)
+        self.assertEqual(self.asignacion_presidente.estado, DestinatarioDocumento.Estado.FIRMADO)
+        self.assertEqual(firma_presidente.destinatario.usuario, self.presidente)
+        self.assertFalse(DocumentoResultado.objects.exists())
+
+        seguimiento = document_tracking_context(self.documento)
+        self.assertEqual(seguimiento["signature_total"], 2)
+        self.assertEqual(seguimiento["signature_completed"], 1)
+        self.assertEqual(seguimiento["signature_percentage"], 50)
+        self.assertFalse(seguimiento["all_signed"])
+        self.assertIn(
+            f"{self.presidente} firmó el documento",
+            [evento["description"] for evento in seguimiento["activity_events"]],
+        )
+
+        self._firmar(self.presidente, self.asignacion_presidente)
+        self.assertEqual(
+            Firma.objects.filter(destinatario=self.asignacion_presidente).count(), 1
+        )
+
+        firmado_miembro = self._firmar(self.miembro, self.asignacion_miembro)
+        self.assertRedirects(firmado_miembro, reverse("documentos:user_completed"))
+        self.asignacion_miembro.refresh_from_db()
+        self.assertEqual(self.asignacion_miembro.estado, DestinatarioDocumento.Estado.FIRMADO)
+        self.assertEqual(Firma.objects.filter(destinatario__envio=self.envio).count(), 2)
+
+        seguimiento = document_tracking_context(self.documento)
+        self.assertEqual(seguimiento["signature_completed"], 2)
+        self.assertEqual(seguimiento["signature_percentage"], 100)
+        self.assertTrue(seguimiento["all_signed"])
+        resultado = DocumentoResultado.objects.get(envio=self.envio)
+        with resultado.archivo.open("rb") as archivo:
+            pagina = PdfReader(BytesIO(archivo.read())).pages[0]
+        firmas_dibujadas = sum(
+            1 for _, operador in pagina.get_contents().operations if operador == b"Do"
+        )
+        self.assertEqual(firmas_dibujadas, 3)
+
+    def test_envio_historico_sin_remitente_destinatario_conserva_flujo(self):
+        self.asignacion_presidente.delete()
+
+        response = self._firmar(self.miembro, self.asignacion_miembro)
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertTrue(Firma.objects.filter(destinatario=self.asignacion_miembro).exists())
+        self.assertTrue(DocumentoResultado.objects.filter(envio=self.envio).exists())

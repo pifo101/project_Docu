@@ -177,10 +177,6 @@ class CampoFirma(models.Model):
         verbose_name = "campo de firma"
         verbose_name_plural = "campos de firma"
         constraints = [
-            models.UniqueConstraint(
-                fields=("destinatario",),
-                name="campo_firma_unico_por_destinatario",
-            ),
             models.CheckConstraint(
                 condition=models.Q(x__gte=0, x__lte=1, y__gte=0, y__lte=1),
                 name="campo_firma_posicion_normalizada",
