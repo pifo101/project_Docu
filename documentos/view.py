@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.utils.text import slugify
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
@@ -280,14 +280,45 @@ def owned_document_detail_view(request, pk):
 
 
 @login_required
-def download_document_view(request, pk):
+@require_GET
+def view_document_view(request, pk):
     documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
-    if not documento.archivo:
-        raise Http404
-    return FileResponse(documento.archivo.open("rb"), as_attachment=True, filename=documento.nombre_original)
+    return _respuesta_archivo_pdf(documento.archivo, documento.nombre_original)
 
 
 @login_required
+@require_GET
+def download_document_view(request, pk):
+    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
+        raise PermissionDenied
+    documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
+    return _respuesta_archivo_pdf(
+        documento.archivo,
+        documento.nombre_original,
+        como_adjunto=True,
+    )
+
+
+def _respuesta_archivo_pdf(campo_archivo, nombre, como_adjunto=False):
+    if not campo_archivo:
+        raise Http404
+    try:
+        archivo = campo_archivo.open("rb")
+    except OSError as error:
+        raise Http404 from error
+    response = FileResponse(
+        archivo,
+        as_attachment=como_adjunto,
+        content_type="application/pdf",
+        filename=nombre,
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    patch_cache_control(response, private=True, no_store=True)
+    return response
+
+
+@login_required
+@require_GET
 def received_document_view(request, pk):
     with transaction.atomic():
         destinatario = get_object_or_404(
@@ -297,50 +328,65 @@ def received_document_view(request, pk):
             pk=pk,
             usuario=request.user,
             envio__estado=EnvioDocumento.Estado.ENVIADO,
+            estado__in=(
+                DestinatarioDocumento.Estado.PENDIENTE,
+                DestinatarioDocumento.Estado.VISTO,
+                DestinatarioDocumento.Estado.FIRMADO,
+            ),
         )
         if destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
             destinatario.estado = DestinatarioDocumento.Estado.VISTO
             destinatario.fecha_visualizacion = timezone.now()
             destinatario.save(update_fields=("estado", "fecha_visualizacion"))
     documento = destinatario.envio.documento
-    archivo = documento.archivo.open("rb")
-
-    return FileResponse(
-        archivo,
-        content_type="application/pdf",
-        filename=documento.nombre_original,
-    )
+    return _respuesta_archivo_pdf(documento.archivo, documento.nombre_original)
 
 
 @login_required
-def download_result_view(request, pk):
+@require_GET
+def view_result_view(request, pk):
+    permiso = (
+        Q(envio__documento__propietario=request.user)
+        | Q(envio__remitente=request.user)
+        | Q(
+            envio__destinatarios__usuario=request.user,
+            envio__destinatarios__estado=DestinatarioDocumento.Estado.FIRMADO,
+        )
+        | Q(
+            envio__destinatarios__usuario=request.user,
+            envio__destinatarios__firma__isnull=False,
+        )
+    )
     resultado = get_object_or_404(
         DocumentoResultado.objects.select_related("envio__documento").filter(
-            Q(envio__documento__propietario=request.user)
-            | Q(envio__remitente=request.user)
-            | Q(
-                envio__destinatarios__usuario=request.user,
-                envio__destinatarios__estado=DestinatarioDocumento.Estado.FIRMADO,
-            )
+            permiso
         ).distinct(),
         envio_id=pk,
         envio__estado=EnvioDocumento.Estado.ENVIADO,
     )
-    if not resultado.archivo:
-        raise Http404
     stem = slugify(Path(resultado.envio.documento.nombre_original).stem) or "documento"
-    try:
-        archivo = resultado.archivo.open("rb")
-    except OSError as error:
-        raise Http404 from error
-    response = FileResponse(
-        archivo,
-        as_attachment=True,
-        content_type="application/pdf",
-        filename=f"{stem}_firmado.pdf",
+    return _respuesta_archivo_pdf(resultado.archivo, f"{stem}_firmado.pdf")
+
+
+@login_required
+@require_GET
+def download_result_view(request, pk):
+    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
+        raise PermissionDenied
+    resultado = get_object_or_404(
+        DocumentoResultado.objects.select_related("envio__documento").filter(
+            Q(envio__documento__propietario=request.user)
+            | Q(envio__remitente=request.user)
+        ).distinct(),
+        envio_id=pk,
+        envio__estado=EnvioDocumento.Estado.ENVIADO,
     )
-    patch_cache_control(response, private=True, no_store=True)
-    return response
+    stem = slugify(Path(resultado.envio.documento.nombre_original).stem) or "documento"
+    return _respuesta_archivo_pdf(
+        resultado.archivo,
+        f"{stem}_firmado.pdf",
+        como_adjunto=True,
+    )
 
 
 def document_detail_view(request):
@@ -377,7 +423,7 @@ def document_editor_view(request, pk):
             {
                 "id": destinatario.pk,
                 "name": (
-                    f"{destinatario.usuario} (Presidente, firma primero)"
+                    f"{destinatario.usuario} (Presidente)"
                     if destinatario.usuario_id == envio.remitente_id
                     else str(destinatario.usuario)
                 ),

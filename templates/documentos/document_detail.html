@@ -15,7 +15,7 @@
                 <div class="detail-hero__identity"><span class="document-icon document-icon--pdf">PDF</span><div><span class="section-eyebrow">Documento</span><h1>{{ documento.nombre_original }}</h1><p>Creado {{ documento.fecha_creacion|date:"d/m/Y H:i" }}</p></div></div>
                 <span class="status {% if all_signed %}status--complete{% elif not envio %}status--draft{% elif envio.estado == 'PREPARACION' %}status--viewed{% else %}status--pending{% endif %}"><i></i>{% if all_signed %}Completado{% elif not envio %}Sin preparar{% elif envio.estado == 'PREPARACION' %}En preparación{% else %}Firmas pendientes{% endif %}</span>
             </section>
-            <div class="detail-actions"><a class="outline-action" href="{% url 'documentos:download' documento.pk %}">Abrir PDF original</a>{% if request.user.cargo_id == 'PRESIDENTE' and not envio %}<a class="primary-action" href="{% url 'documentos:committee_recipients' documento.pk %}">Enviar al comité</a>{% elif request.user.cargo_id == 'PRESIDENTE' and envio.estado == 'PREPARACION' %}<a class="primary-action" href="{% url 'documentos:document_editor' documento.pk %}">Continuar preparación</a>{% endif %}</div>
+            <div class="detail-actions"><a class="outline-action" href="{% url 'documentos:view_document' documento.pk %}">Ver PDF original</a>{% if request.user.cargo_id == 'PRESIDENTE' %}<a class="outline-action" href="{% url 'documentos:download' documento.pk %}">Descargar PDF original</a>{% endif %}{% if request.user.cargo_id == 'PRESIDENTE' and not envio %}<a class="primary-action" href="{% url 'documentos:committee_recipients' documento.pk %}">Enviar al comité</a>{% elif request.user.cargo_id == 'PRESIDENTE' and envio.estado == 'PREPARACION' %}<a class="primary-action" href="{% url 'documentos:document_editor' documento.pk %}">Continuar preparación</a>{% endif %}</div>
             <div class="detail-layout{% if not envio %} detail-layout--single{% endif %}">
                 <div class="detail-main">
                     {% if envio %}
@@ -31,7 +31,7 @@
                                 <div><dt>Documento enviado</dt><dd>{% if envio.estado == 'ENVIADO' and envio.fecha_envio %}{{ envio.fecha_envio|date:"d/m/Y H:i" }}{% else %}Aún no enviado{% endif %}</dd></div>
                                 <div><dt>Última actividad</dt><dd>{% if last_activity %}{{ last_activity.description }}<small>{{ last_activity.occurred_at|date:"d/m/Y H:i" }}</small>{% else %}Sin actividad registrada{% endif %}</dd></div>
                             </dl>
-                            <div class="signed-download">{% if signed_document_download_url %}<a class="primary-action" href="{{ signed_document_download_url }}">Descargar documento firmado</a>{% else %}<small>Documento firmado aún no disponible</small>{% endif %}</div>
+                            <div class="signed-download">{% if signed_document_download_url %}<a class="outline-action" href="{% url 'documentos:view_result' envio.pk %}">Ver documento firmado</a>{% if request.user.cargo_id == 'PRESIDENTE' %}<a class="primary-action" href="{{ signed_document_download_url }}">Descargar documento firmado</a>{% endif %}{% else %}<small>Documento firmado aún no disponible</small>{% endif %}</div>
                         </div>
                     </section>
                     <section class="workflow-card">

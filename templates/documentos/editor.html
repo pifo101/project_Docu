@@ -6,7 +6,7 @@
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}">{% endblock %}
 
 {% block content %}
-<div class="editor-shell"{% if documento %} data-editor-backend data-pdf-url="{% url 'documentos:download' documento.pk %}" data-fields-url="{% url 'documentos:signature_fields' documento.pk %}" data-csrf-token="{{ csrf_token }}"{% endif %}>
+<div class="editor-shell"{% if documento %} data-editor-backend data-pdf-url="{% url 'documentos:view_document' documento.pk %}" data-fields-url="{% url 'documentos:signature_fields' documento.pk %}" data-csrf-token="{{ csrf_token }}"{% endif %}>
     <header class="editor-header">
         <a class="editor-back" href="{% if documento %}{% url 'documentos:committee_recipients' documento.pk %}{% else %}{% url 'documentos:recipients' %}{% endif %}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
@@ -74,7 +74,7 @@
                         <span>Tipo</span>
                         <strong data-property-type></strong>
                     </div>
-                    <label class="property-recipient"><span>Destinatario</span><select data-property-recipient{% if not documento %} hidden{% endif %}>{% for destinatario in destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.usuario }}{% if destinatario.usuario_id == request.user.id %} (Presidente, firma primero){% endif %}</option>{% endfor %}</select><strong data-property-recipient-label{% if documento %} hidden{% endif %}>Destinatarios seleccionados</strong></label>
+                    <label class="property-recipient"><span>Destinatario</span><select data-property-recipient{% if not documento %} hidden{% endif %}>{% for destinatario in destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.usuario }}{% if destinatario.usuario_id == request.user.id %} (Presidente){% endif %}</option>{% endfor %}</select><strong data-property-recipient-label{% if documento %} hidden{% endif %}>Destinatarios seleccionados</strong></label>
                     <label class="property-switch">
                         <input type="checkbox" data-property-required{% if documento %} checked disabled{% endif %}>
                         <span aria-hidden="true"></span>

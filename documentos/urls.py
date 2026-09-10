@@ -22,6 +22,7 @@ urlpatterns = [
     ),
     path("subir/", view.upload_document_view, name="upload"),
     path("<int:pk>/", view.owned_document_detail_view, name="document_detail"),
+    path("<int:pk>/ver/", view.view_document_view, name="view_document"),
     path("<int:pk>/descargar/", view.download_document_view, name="download"),
     path("<int:pk>/destinatarios/", view.committee_recipients_view, name="committee_recipients"),
     path("<int:pk>/revisar-envio/", view.send_review_view, name="send_review"),
@@ -29,6 +30,7 @@ urlpatterns = [
     path("<int:pk>/campos-firma/", view.signature_fields_view, name="signature_fields"),
     path("<int:pk>/enviar/", view.send_document_view, name="send"),
     path("recibidos/<int:pk>/ver/", view.received_document_view, name="received_document"),
+    path("envios/<int:pk>/resultado/ver/", view.view_result_view, name="view_result"),
     path("envios/<int:pk>/resultado/", view.download_result_view, name="download_result"),
     path("pendientes/", view.pending_view, name="pending"),
     # Prototipos aislados: ninguna navegación del flujo real debe depender de estas rutas.

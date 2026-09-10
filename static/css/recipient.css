@@ -55,6 +55,8 @@
 .recipient-document-error span { color: #667085; font-size: 10px; line-height: 1.5; }
 .recipient-document-page { position: relative; max-width: 100%; overflow: hidden; background: white; box-shadow: 0 16px 45px rgba(16,24,40,.15); }
 .recipient-pdf-canvas { display: block; width: 100%; height: 100%; }
+.recipient-viewer--protected .recipient-document, .recipient-viewer--protected .recipient-document * { -webkit-user-select: none; user-select: none; }
+.recipient-viewer--protected .recipient-pdf-canvas, .recipient-viewer--protected .recipient-document img { -webkit-user-drag: none; }
 .recipient-page-number { position: absolute; top: 8px; left: 8px; padding: 4px 7px; border-radius: 99px; color: #475467; background: rgba(255,255,255,.9); box-shadow: 0 1px 4px rgba(16,24,40,.12); font-size: 8px; pointer-events: none; }
 .recipient-field { position: absolute; display: grid; box-sizing: border-box; padding: 8px 10px; border: 2px solid var(--color-primary); border-radius: 7px; color: var(--color-dark-blue); background: rgba(239,244,255,.96); box-shadow: 0 5px 15px rgba(14,67,240,.18); text-align: left; cursor: pointer; }
 .recipient-field:hover, .recipient-field:focus-visible { outline: 3px solid rgba(14,67,240,.2); outline-offset: 2px; }
@@ -120,3 +122,4 @@
 @media (max-width: 760px) { .signing-footer { justify-content: space-between; } .signing-footer .signing-reject-mobile { display: inline-flex; margin-left: 0; } }
 @media (max-width: 480px) { .secure-note { font-size: 0; } .request-content, .completed-content { padding: 24px 14px; } .request-card, .completed-card { padding: 28px 20px; border-radius: 18px; } .recipient-field { padding: 5px 6px; } .signature-dialog__header { padding: 20px 18px 15px; } .signature-tabs { padding: 12px 18px; gap: 7px; } .signature-tabs button { padding: 7px 6px; } .saved-signature-panel { padding: 16px 18px 20px; } .signature-canvas-wrap { margin: 16px 18px 0; } .signature-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; padding: 15px 18px 20px; } .signature-dialog__actions .recipient-primary { grid-column: 1 / span 2; grid-row: 1; } .completed-document { grid-template-columns: auto minmax(0,1fr); } .completed-status { grid-column: 2; width: fit-content; } }
 @media (prefers-reduced-motion: reduce) { .signing-progress i { transition: none; } }
+@media print { .recipient-viewer--protected { display: none !important; } }
