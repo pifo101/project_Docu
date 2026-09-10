@@ -211,8 +211,8 @@
 
     function completeSimpleField(field) {
         const type = field.dataset.completable;
-        if (type === "name") field.querySelector("[data-field-value]").textContent = "José Ramírez";
-        if (type === "date") field.querySelector("[data-field-value]").textContent = "3 sep 2026";
+        if (type === "name") field.querySelector("[data-field-value]").textContent = "Nombre de demostración";
+        if (type === "date") field.querySelector("[data-field-value]").textContent = "Fecha de demostración";
         field.classList.toggle("field-complete", type === "checkbox" ? !field.classList.contains("field-complete") : true);
         updateProgress();
     }

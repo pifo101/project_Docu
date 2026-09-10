@@ -381,6 +381,8 @@ class FirmaFlujoTests(TestCase):
         self.assertContains(response, str(self.presidente))
         self.assertContains(response, "data-signature-canvas")
         self.assertContains(response, "Registrar firma y aceptación")
+        self.assertContains(response, f'action="{reverse("usuarios:logout")}"')
+        self.assertContains(response, 'method="post"')
         self.assertContains(response, 'data-protected="true"')
         self.assertContains(response, 'class="recipient-viewer recipient-viewer--protected"')
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)

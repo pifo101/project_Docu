@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from django.apps import apps
 from django.contrib.auth import authenticate, get_user_model
 from django.db import connection, IntegrityError, transaction
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .constants import OFFICIAL_COMMITTEE_NAMES
@@ -80,6 +80,95 @@ class AuthPagesTests(TestCase):
 
         self.assertRedirects(response, reverse("usuarios:login"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_logout_rejects_post_without_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.usuario)
+
+        response = csrf_client.post(reverse("usuarios:logout"))
+
+        self.assertEqual(response.status_code, 403)
+
+
+class ProfileIdentityTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        cls.comite_a = Comite.objects.create(nombre="Comité Identidad A")
+        cls.comite_b = Comite.objects.create(nombre="Comité Identidad B")
+        cls.usuario_a = get_user_model().objects.create_user(
+            email="elena.identidad@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Elena",
+            last_name="Caal",
+            comite=cls.comite_a,
+            cargo=presidente,
+        )
+        cls.miembro_a = get_user_model().objects.create_user(
+            email="miembro.identidad@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Mario",
+            last_name="Ixcoy",
+            comite=cls.comite_a,
+            cargo=miembro,
+        )
+        cls.usuario_b = get_user_model().objects.create_user(
+            email="sofia.identidad@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Sofía",
+            last_name="Choc",
+            comite=cls.comite_b,
+            cargo=presidente,
+        )
+
+    def test_president_profile_uses_authenticated_user_and_real_committee_data(self):
+        self.client.force_login(self.usuario_a)
+
+        response = self.client.get(reverse("usuarios:profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Elena Caal")
+        self.assertContains(response, self.usuario_a.email)
+        self.assertContains(response, self.comite_a.nombre)
+        self.assertContains(response, self.usuario_a.cargo.nombre)
+        self.assertContains(response, "2 integrantes activos")
+        self.assertEqual(response.context["active_committee_member_count"], 2)
+        for mock_value in (
+            "Andrea",
+            "Morales",
+            "andrea.morales",
+            "1.8 GB",
+            "5 GB",
+            "36%",
+            "08:42",
+            "Gerente administrativa",
+        ):
+            self.assertNotContains(response, mock_value)
+
+    def test_different_presidents_see_only_their_own_identity(self):
+        self.client.force_login(self.usuario_b)
+
+        response = self.client.get(reverse("usuarios:profile"))
+
+        self.assertContains(response, "Sofía Choc")
+        self.assertContains(response, self.usuario_b.email)
+        self.assertContains(response, self.comite_b.nombre)
+        self.assertNotContains(response, "Elena Caal")
+        self.assertNotContains(response, self.usuario_a.email)
+        self.assertNotContains(response, self.comite_a.nombre)
+
+    def test_member_profile_uses_real_identity_and_sidebar_count_context(self):
+        self.client.force_login(self.miembro_a)
+
+        response = self.client.get(reverse("usuarios:profile"))
+
+        self.assertContains(response, "Mario Ixcoy")
+        self.assertContains(response, self.miembro_a.email)
+        self.assertContains(response, self.comite_a.nombre)
+        self.assertEqual(response.context["pending_count"], 0)
+        self.assertContains(response, f'action="{reverse("usuarios:logout")}"')
+        self.assertContains(response, 'method="post"')
 
 
 class RegistroUsuarioTests(TestCase):

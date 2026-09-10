@@ -1,23 +1,53 @@
 const menuButton = document.querySelector(".menu-toggle");
 const sidebar = document.querySelector(".sidebar");
 const backdrop = document.querySelector(".sidebar-backdrop");
+const dashboardMain = document.querySelector(".dashboard-main");
+const mobileNavigation = window.matchMedia("(max-width: 820px)");
 
 function setMenu(open) {
+    if (!sidebar || !backdrop || !menuButton) return;
     sidebar.classList.toggle("sidebar--open", open);
     backdrop.classList.toggle("sidebar-backdrop--visible", open);
+    sidebar.inert = mobileNavigation.matches && !open;
+    if (dashboardMain) dashboardMain.inert = mobileNavigation.matches && open;
+    backdrop.tabIndex = open ? 0 : -1;
     menuButton.setAttribute("aria-expanded", String(open));
     menuButton.setAttribute("aria-label", open ? "Cerrar navegación" : "Abrir navegación");
+    if (open) sidebar.querySelector("a, button")?.focus();
+}
+
+function syncMenuAvailability() {
+    if (!sidebar) return;
+    if (!mobileNavigation.matches) {
+        sidebar.inert = false;
+        if (dashboardMain) dashboardMain.inert = false;
+        setMenu(false);
+    } else if (!sidebar.classList.contains("sidebar--open")) {
+        sidebar.inert = true;
+    }
 }
 
 menuButton?.addEventListener("click", () => {
     setMenu(!sidebar.classList.contains("sidebar--open"));
 });
 
-backdrop?.addEventListener("click", () => setMenu(false));
+backdrop?.addEventListener("click", () => {
+    setMenu(false);
+    menuButton?.focus();
+});
 
 sidebar?.querySelectorAll("a").forEach((link) => {
     link.addEventListener("click", () => setMenu(false));
 });
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && sidebar?.classList.contains("sidebar--open")) {
+        setMenu(false);
+        menuButton?.focus();
+    }
+});
+mobileNavigation.addEventListener("change", syncMenuAvailability);
+syncMenuAvailability();
 
 const uploadDialog = document.querySelector(".upload-dialog");
 const uploadForm = document.querySelector(".upload-form");

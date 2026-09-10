@@ -19,7 +19,7 @@
                 <strong data-document-name>{{ documento.nombre_original|default:"Documento PDF" }}</strong>
             </div>
         </div>
-        <button class="editor-continue" type="button" data-editor-continue data-review-url="{% if documento %}{% url 'documentos:send_review' documento.pk %}{% else %}{% url 'documentos:review' %}{% endif %}" disabled>Continuar</button>
+        <div class="editor-header__actions"><button class="editor-continue" type="button" data-editor-continue data-review-url="{% if documento %}{% url 'documentos:send_review' documento.pk %}{% else %}{% url 'documentos:review' %}{% endif %}" disabled>Continuar</button>{% include "includes/session_logout.html" %}</div>
     </header>
 
     <main class="editor-workspace">

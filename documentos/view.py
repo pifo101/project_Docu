@@ -106,10 +106,11 @@ def _campo_serializado(campo):
     }
 
 
+@login_required
 def documents_view(request):
-    context = sender_documents_context(request.user) if request.user.is_authenticated else {}
+    context = sender_documents_context(request.user)
     context.update({
-        "documentos": context.get("owned_documents"),
+        "documentos": context["owned_documents"],
         "documento_max_file_size": settings.DOCUMENTO_MAX_FILE_SIZE,
         "documento_max_file_size_mb": settings.DOCUMENTO_MAX_FILE_SIZE // (1024 * 1024),
     })

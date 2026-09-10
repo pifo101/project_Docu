@@ -79,19 +79,25 @@ def dashboard_view(request):
 
 @login_required
 def profile_view(request):
-    template_name = (
-        "usuarios/profile.html"
-        if (
-            request.user.is_staff
-            or request.user.is_superuser
-            or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
-        )
-        else "usuarios/user_account.html"
+    sender_portal = (
+        request.user.is_staff
+        or request.user.is_superuser
+        or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
     )
-    return render(request, template_name, {
+    context = (
+        sender_documents_context(request.user)
+        if sender_portal
+        else recipient_documents_context(request.user)
+    )
+    context.update({
         "firma_perfil": FirmaPerfil.objects.filter(usuario=request.user).first(),
         "firma_perfil_max_file_size": settings.FIRMA_PERFIL_MAX_FILE_SIZE,
+        "active_committee_member_count": request.user.comite.usuarios.filter(
+            is_active=True
+        ).count(),
     })
+    template_name = "usuarios/profile.html" if sender_portal else "usuarios/user_account.html"
+    return render(request, template_name, context)
 
 
 @require_POST

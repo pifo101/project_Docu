@@ -12,11 +12,11 @@
         </nav>
     </div>
     <div class="sidebar__bottom">
-        <a class="profile-chip" href="{% url 'usuarios:profile' %}">
+        <a class="profile-chip{% if active_section == 'profile' %} profile-chip--active{% endif %}" href="{% url 'usuarios:profile' %}"{% if active_section == 'profile' %} aria-current="page"{% endif %}>
             <span class="profile-chip__avatar">{{ request.user.first_name|first|default:"U" }}{{ request.user.last_name|first }}</span>
-            <span class="profile-chip__copy"><strong>{{ request.user.get_full_name|default:request.user.email }}</strong><small>Destinatario</small></span>
+            <span class="profile-chip__copy"><strong>{{ request.user.get_full_name|default:request.user.email }}</strong><small>{{ request.user.cargo.nombre|default:"Usuario" }}</small></span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
         </a>
-        <form class="user-sidebar__logout" method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button type="submit">Cerrar sesión</button></form>
+        <form class="sidebar-logout" method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button type="submit">Cerrar sesión</button></form>
     </div>
 </aside>
