@@ -582,7 +582,9 @@ class FirmaFlujoTests(TestCase):
 
         response = self.client.get(self.url)
 
-        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["readonly"])
+        self.assertContains(response, "Esta vista es de solo lectura")
         self.assertTrue(DocumentoResultado.objects.filter(envio=self.envio).exists())
 
     def test_fecha_visualizacion_existente_se_conserva(self):
@@ -1025,7 +1027,16 @@ class PresidentePrimerFirmanteTests(TestCase):
         )
         self.client.force_login(self.miembro)
 
-        self.assertEqual(self.client.get(miembro_url).status_code, 409)
+        vista_bloqueada = self.client.get(miembro_url)
+        self.assertEqual(vista_bloqueada.status_code, 200)
+        self.assertTrue(vista_bloqueada.context["readonly"])
+        self.assertTrue(vista_bloqueada.context["waiting_for_president"])
+        self.assertEqual(len(vista_bloqueada.context["campos_firma_data"]), 1)
+        self.assertEqual(vista_bloqueada.context["campos_firma_data"][0]["x"], 0.55)
+        self.assertContains(vista_bloqueada, "presidente remitente haya firmado")
+        self.assertContains(vista_bloqueada, 'data-readonly="true"')
+        self.assertNotContains(vista_bloqueada, "Registrar firma y aceptación")
+        self.assertNotContains(vista_bloqueada, "Descargar")
         bloqueado = self._firmar(self.miembro, self.asignacion_miembro)
         self.assertEqual(bloqueado.status_code, 409)
         self.assertContains(bloqueado, "presidente remitente", status_code=409)
@@ -1064,6 +1075,12 @@ class PresidentePrimerFirmanteTests(TestCase):
             Firma.objects.filter(destinatario=self.asignacion_presidente).count(), 1
         )
 
+        self.client.force_login(self.miembro)
+        vista_habilitada = self.client.get(miembro_url)
+        self.assertEqual(vista_habilitada.status_code, 200)
+        self.assertFalse(vista_habilitada.context["readonly"])
+        self.assertContains(vista_habilitada, "Registrar firma y aceptación")
+
         firmado_miembro = self._firmar(self.miembro, self.asignacion_miembro)
         self.assertRedirects(firmado_miembro, reverse("documentos:user_completed"))
         self.asignacion_miembro.refresh_from_db()
@@ -1081,6 +1098,18 @@ class PresidentePrimerFirmanteTests(TestCase):
             1 for _, operador in pagina.get_contents().operations if operador == b"Do"
         )
         self.assertEqual(firmas_dibujadas, 3)
+
+        self.client.force_login(self.miembro)
+        vista_firmada = self.client.get(miembro_url)
+        self.assertEqual(vista_firmada.status_code, 200)
+        self.assertTrue(vista_firmada.context["readonly"])
+        self.assertEqual(
+            vista_firmada.context["pdf_view_url"],
+            reverse("documentos:view_result", args=[self.envio.pk]),
+        )
+        self.assertEqual(vista_firmada.context["campos_firma_data"], [])
+        self.assertNotContains(vista_firmada, "Campo de firma asignado")
+        self.assertNotContains(vista_firmada, "Descargar")
 
     def test_envio_historico_sin_remitente_destinatario_conserva_flujo(self):
         self.asignacion_presidente.delete()

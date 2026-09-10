@@ -16,6 +16,7 @@
     const signatureTabs = Array.from(document.querySelectorAll("[data-signature-tab]"));
     const nextHelp = document.querySelector("[data-next-help]");
     const nextFieldButton = document.querySelector("[data-next-field]");
+    const readonly = recipientViewer?.dataset.readonly === "true";
     let signatureContext = null;
     let drawing = false;
     let hasSignatureStroke = false;
@@ -117,7 +118,7 @@
         recipientPages.setAttribute("aria-busy", "false");
         placeSignatureFields();
         focusAssignedPage();
-        if (nextFieldButton) nextFieldButton.disabled = false;
+        if (nextFieldButton && !readonly) nextFieldButton.disabled = false;
         if (nextHelp) nextHelp.textContent = "Dibuja tu firma para continuar.";
     }
 
@@ -175,8 +176,8 @@
             if (recipientPageStatus) recipientPageStatus.textContent = `${recipientPdf.numPages} páginas`;
             placeSignatureFields();
             focusAssignedPage();
-            if (nextFieldButton) nextFieldButton.disabled = false;
-            if (nextHelp) nextHelp.textContent = "Elige una firma guardada o dibuja una nueva.";
+            if (nextFieldButton && !readonly) nextFieldButton.disabled = false;
+            if (nextHelp && !readonly) nextHelp.textContent = "Elige una firma guardada o dibuja una nueva.";
         } catch (error) {
             console.warn("No se pudo mostrar el PDF.", error);
             if (demo) drawMockDocument();
@@ -271,6 +272,7 @@
 
     fields.forEach((field) => {
         field.addEventListener("click", () => {
+            if (readonly) return;
             if (field.dataset.completable === "signature") {
                 signatureDialog?.showModal();
                 const selected = document.querySelector("[data-signature-tab].signature-tab--active");

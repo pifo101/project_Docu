@@ -145,8 +145,10 @@ class DocumentoUploadTests(TestCase):
     def setUp(self):
         comite = Comite.objects.create(nombre="Comité de documentos")
         cargo = Cargo.objects.get(codigo="MIEMBRO")
+        cargo_presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
         self.usuario = self._crear_usuario("propietario", comite, cargo)
         self.otro_usuario = self._crear_usuario("otro", comite, cargo)
+        self.presidente = self._crear_usuario("presidente-documentos", comite, cargo_presidente)
 
     def tearDown(self):
         shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
@@ -217,7 +219,48 @@ class DocumentoUploadTests(TestCase):
         self.assertNotContains(listado, "ajeno.pdf")
         self.assertEqual(self.client.get(reverse("documentos:document_detail", args=[propio.pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse("documentos:document_detail", args=[ajeno.pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse("documentos:download", args=[ajeno.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("documentos:download", args=[ajeno.pk])).status_code, 403)
+
+    def test_propietario_visualiza_original_pero_solo_presidente_descarga(self):
+        documento_miembro = Documento.objects.create(
+            propietario=self.usuario,
+            archivo=self._pdf("miembro-propio.pdf"),
+            nombre_original="miembro-propio.pdf",
+        )
+        documento_presidente = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=self._pdf("presidente-propio.pdf"),
+            nombre_original="presidente-propio.pdf",
+        )
+
+        self.client.force_login(self.usuario)
+        visualizacion_miembro = self.client.get(
+            reverse("documentos:view_document", args=[documento_miembro.pk])
+        )
+        self.assertEqual(visualizacion_miembro.status_code, 200)
+        self.assertIn("inline", visualizacion_miembro["Content-Disposition"])
+        self.assertEqual(
+            self.client.get(reverse("documentos:download", args=[documento_miembro.pk])).status_code,
+            403,
+        )
+        detalle_miembro = self.client.get(
+            reverse("documentos:document_detail", args=[documento_miembro.pk])
+        )
+        self.assertContains(detalle_miembro, "Ver PDF original")
+        self.assertNotContains(detalle_miembro, "Descargar PDF original")
+
+        self.client.force_login(self.presidente)
+        visualizacion = self.client.get(
+            reverse("documentos:view_document", args=[documento_presidente.pk])
+        )
+        self.assertEqual(visualizacion.status_code, 200)
+        self.assertIn("inline", visualizacion["Content-Disposition"])
+        self.assertIn("no-store", visualizacion["Cache-Control"])
+        descarga = self.client.get(
+            reverse("documentos:download", args=[documento_presidente.pk])
+        )
+        self.assertEqual(descarga.status_code, 200)
+        self.assertIn("attachment", descarga["Content-Disposition"])
 
     def test_miembro_no_ve_acciones_de_preparacion_o_envio(self):
         documento = Documento.objects.create(
@@ -653,6 +696,10 @@ class EnvioDocumentoTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertIn("private", response["Cache-Control"])
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
         self.assertEqual(contenido, b"%PDF-1.7\nacta")
         self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertIsNotNone(destinatario.fecha_visualizacion)
@@ -1185,8 +1232,12 @@ class UserDocumentPortalTests(TestCase):
         )
         self.assertContains(
             response,
-            reverse("documentos:received_document", args=[self.completed.pk]),
+            reverse("firmas:recipient_sign", args=[self.completed.pk]),
         )
+        self.assertNotContains(response, "Descargar documento")
+        self.assertNotContains(response, reverse(
+            "documentos:download_result", args=[self.completed.envio_id]
+        ))
 
     def test_user_with_sender_role_can_also_open_recipient_portal(self):
         self.client.force_login(self.sender)
@@ -1393,13 +1444,17 @@ class DocumentTrackingTests(TestCase):
         self._create_result()
         result_url = reverse("documentos:download_result", args=[self.envio.pk])
         original_url = reverse("documentos:download", args=[self.document.pk])
+        original_view_url = reverse("documentos:view_document", args=[self.document.pk])
+        result_view_url = reverse("documentos:view_result", args=[self.envio.pk])
 
         response = self._get_detail()
 
         self.assertTrue(response.context["resultado_disponible"])
         self.assertEqual(response.context["signed_document_download_url"], result_url)
         self.assertContains(response, f'href="{result_url}">Descargar documento firmado</a>')
-        self.assertContains(response, f'href="{original_url}">Abrir PDF original</a>')
+        self.assertContains(response, f'href="{original_url}">Descargar PDF original</a>')
+        self.assertContains(response, f'href="{original_view_url}">Ver PDF original</a>')
+        self.assertContains(response, f'href="{result_view_url}">Ver documento firmado</a>')
         self.assertNotContains(response, 'href="#"')
 
     def test_contexto_de_seguimiento_solo_consulta_y_no_genera_resultado(self):
@@ -1762,21 +1817,36 @@ class DocumentoResultadoTests(TestCase):
         self.assertFalse(DocumentoResultado.objects.exists())
         self.assertEqual(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf")), [])
 
-    def test_descarga_protegida_para_propietario_y_destinatario_firmado(self):
+    def test_presidente_descarga_resultado_y_destinatario_solo_lo_visualiza(self):
         envio, _ = self._crear_envio()
         destinatario = self._agregar_firmante(envio, self.usuario_a)
         generar_resultado_si_completo(envio.pk)
         url = reverse("documentos:download_result", args=[envio.pk])
 
-        for usuario in (self.propietario, self.usuario_a):
-            self.client.force_login(usuario)
-            response = self.client.get(url)
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response["Content-Type"], "application/pdf")
-            self.assertIn("acta-reunion_firmado.pdf", response["Content-Disposition"])
-            self.assertIn("private", response["Cache-Control"])
-            self.assertIn("no-store", response["Cache-Control"])
-            self.assertTrue(b"".join(response.streaming_content).startswith(b"%PDF-"))
+        self.client.force_login(self.propietario)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("acta-reunion_firmado.pdf", response["Content-Disposition"])
+        self.assertIn("private", response["Cache-Control"])
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertTrue(b"".join(response.streaming_content).startswith(b"%PDF-"))
+        visualizacion_presidente = self.client.get(
+            reverse("documentos:view_result", args=[envio.pk])
+        )
+        self.assertEqual(visualizacion_presidente.status_code, 200)
+        self.assertIn("inline", visualizacion_presidente["Content-Disposition"])
+
+        self.client.force_login(self.usuario_a)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        visualizacion = self.client.get(
+            reverse("documentos:view_result", args=[envio.pk])
+        )
+        self.assertEqual(visualizacion.status_code, 200)
+        self.assertIn("inline", visualizacion["Content-Disposition"])
+        self.assertIn("no-store", visualizacion["Cache-Control"])
+        self.assertTrue(b"".join(visualizacion.streaming_content).startswith(b"%PDF-"))
         self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.FIRMADO)
 
     def test_usuarios_no_relacionados_y_otro_comite_reciben_404(self):
@@ -1787,7 +1857,11 @@ class DocumentoResultadoTests(TestCase):
 
         for usuario in (self.no_relacionado, self.externo):
             self.client.force_login(usuario)
-            self.assertEqual(self.client.get(url).status_code, 404)
+            self.assertEqual(self.client.get(url).status_code, 403)
+            self.assertEqual(
+                self.client.get(reverse("documentos:view_result", args=[envio.pk])).status_code,
+                404,
+            )
 
     def test_antes_de_completarse_no_hay_descarga(self):
         envio, _ = self._crear_envio()
