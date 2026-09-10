@@ -25,18 +25,19 @@
     let recipientResizeTimer = null;
     let assignedPageFocused = false;
 
-    function readSignatureField() {
-        const element = document.getElementById("recipient-signature-field");
-        if (!element) return { page: 1, x: 0.5, y: 0.74, width: 0.38, height: 0.1 };
+    function readSignatureFields() {
+        const element = document.getElementById("recipient-signature-fields");
+        if (!element) return [{ page: 1, x: 0.5, y: 0.74, width: 0.38, height: 0.1 }];
         try {
-            return JSON.parse(element.textContent);
+            const parsed = JSON.parse(element.textContent);
+            return Array.isArray(parsed) ? parsed : [];
         } catch (error) {
-            console.warn("No se pudo leer la ubicación de firma.", error);
-            return null;
+            console.warn("No se pudieron leer las ubicaciones de firma.", error);
+            return [];
         }
     }
 
-    const signatureFieldData = readSignatureField();
+    const signatureFieldsData = readSignatureFields();
 
     function createRecipientPage(pageNumber, totalPages, width, height) {
         const pageElement = document.createElement("div");
@@ -56,24 +57,27 @@
         return { pageElement, canvas };
     }
 
-    function placeSignatureField() {
-        const signatureField = fields.find((field) => field.dataset.completable === "signature");
-        if (!signatureField || !signatureFieldData) return;
-        const targetPage = recipientPages?.querySelector(`[data-page="${signatureFieldData.page}"]`);
-        if (!targetPage) return;
-        signatureField.style.left = `${signatureFieldData.x * 100}%`;
-        signatureField.style.top = `${signatureFieldData.y * 100}%`;
-        signatureField.style.width = `${signatureFieldData.width * 100}%`;
-        signatureField.style.height = `${signatureFieldData.height * 100}%`;
-        signatureField.style.right = "auto";
-        signatureField.style.bottom = "auto";
-        signatureField.hidden = false;
-        targetPage.append(signatureField);
+    function placeSignatureFields() {
+        fields.filter((field) => field.dataset.completable === "signature").forEach((field, index) => {
+            const fieldData = signatureFieldsData[index];
+            if (!fieldData) return;
+            const targetPage = recipientPages?.querySelector(`[data-page="${fieldData.page}"]`);
+            if (!targetPage) return;
+            field.style.left = `${fieldData.x * 100}%`;
+            field.style.top = `${fieldData.y * 100}%`;
+            field.style.width = `${fieldData.width * 100}%`;
+            field.style.height = `${fieldData.height * 100}%`;
+            field.style.right = "auto";
+            field.style.bottom = "auto";
+            field.hidden = false;
+            targetPage.append(field);
+        });
     }
 
     function focusAssignedPage() {
-        if (assignedPageFocused || !signatureFieldData) return;
-        const targetPage = recipientPages?.querySelector(`[data-page="${signatureFieldData.page}"]`);
+        const firstField = signatureFieldsData[0];
+        if (assignedPageFocused || !firstField) return;
+        const targetPage = recipientPages?.querySelector(`[data-page="${firstField.page}"]`);
         if (!targetPage) return;
         assignedPageFocused = true;
         targetPage.scrollIntoView({ block: "center" });
@@ -111,7 +115,7 @@
         context.strokeStyle = "#d0d5dd";
         context.strokeRect(72, 70, 576, 792);
         recipientPages.setAttribute("aria-busy", "false");
-        placeSignatureField();
+        placeSignatureFields();
         focusAssignedPage();
         if (nextFieldButton) nextFieldButton.disabled = false;
         if (nextHelp) nextHelp.textContent = "Dibuja tu firma para continuar.";
@@ -169,7 +173,7 @@
             if (currentVersion !== recipientRenderVersion) return;
             recipientPages.setAttribute("aria-busy", "false");
             if (recipientPageStatus) recipientPageStatus.textContent = `${recipientPdf.numPages} páginas`;
-            placeSignatureField();
+            placeSignatureFields();
             focusAssignedPage();
             if (nextFieldButton) nextFieldButton.disabled = false;
             if (nextHelp) nextHelp.textContent = "Elige una firma guardada o dibuja una nueva.";
@@ -245,17 +249,18 @@
     }
 
     function applySignature(source, method, alt) {
-        const signatureField = document.querySelector('[data-completable="signature"]');
-        const image = document.createElement("img");
-        image.src = source;
-        image.alt = alt;
         if (signatureMethod) signatureMethod.value = method;
         if (signatureInput) signatureInput.value = method === "DIBUJADA" ? source : "";
         if (consentCheckbox) consentCheckbox.checked = false;
         if (finalizeButton) finalizeButton.disabled = true;
         if (nextHelp) nextHelp.textContent = method === "PERFIL" ? "Firma guardada seleccionada. Confirma tu aceptación." : "Firma dibujada preparada. Confirma tu aceptación.";
-        signatureField.querySelector("[data-field-value], img")?.replaceWith(image);
-        signatureField.classList.add("field-complete");
+        fields.filter((field) => field.dataset.completable === "signature").forEach((field) => {
+            const image = document.createElement("img");
+            image.src = source;
+            image.alt = alt;
+            field.querySelector("[data-field-value], img")?.replaceWith(image);
+            field.classList.add("field-complete");
+        });
         signatureDialog.close();
         updateProgress();
     }

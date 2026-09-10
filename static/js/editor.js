@@ -132,9 +132,8 @@ function recipientsWithoutSignatureField() {
 
 function updateBackendFieldTools() {
     if (!backendEditor || !loadedPdf) return;
-    const missingRecipients = recipientsWithoutSignatureField();
     fieldTools.forEach((tool) => {
-        tool.disabled = tool.dataset.fieldType !== "signature" || missingRecipients.length === 0;
+        tool.disabled = tool.dataset.fieldType !== "signature" || backendRecipients.length === 0;
     });
 }
 
@@ -290,10 +289,10 @@ function renderFieldsForLayer(layer) {
 function createDocumentField(type, layer, clientX, clientY) {
     const config = FIELD_TYPES[type];
     const fieldRecipient = backendEditor && type === "signature"
-        ? recipientsWithoutSignatureField()[0]
+        ? recipientsWithoutSignatureField()[0] || recipientById(propertyRecipient?.value) || backendRecipients[0]
         : recipient;
     if (!fieldRecipient) {
-        showEditorFeedback("Todos los destinatarios ya tienen un campo de firma.");
+        showEditorFeedback("No hay destinatarios disponibles para asignar el campo.");
         return;
     }
     const layerRect = layer.getBoundingClientRect();
@@ -820,17 +819,6 @@ propertyRequired?.addEventListener("change", () => {
 propertyRecipient?.addEventListener("change", () => {
     const selectedRecipient = recipientById(propertyRecipient.value);
     if (!selectedRecipient) return;
-    const assignedToAnotherField = documentFields.some((field) => (
-        field.type === "signature"
-        && field.recipient_id === selectedRecipient.id
-        && !sameFieldId(field, selectedField?.dataset.id)
-    ));
-    if (assignedToAnotherField) {
-        const currentField = documentFields.find((field) => sameFieldId(field, selectedField?.dataset.id));
-        propertyRecipient.value = String(currentField.recipient_id);
-        showEditorFeedback(`${selectedRecipient.name} ya tiene un campo de firma.`);
-        return;
-    }
     updateSelectedProperty("recipient_id", selectedRecipient.id);
     updateSelectedProperty("recipient_name", selectedRecipient.name);
     updateBackendFieldTools();

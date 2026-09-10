@@ -303,17 +303,18 @@ class EnvioDocumentoTests(TestCase):
         self.preparar_destinatarios()
         envio = EnvioDocumento.objects.get(documento=self.documento)
         destinatario = envio.destinatarios.get(usuario=self.miembro)
-        CampoFirma.objects.create(
-            destinatario=destinatario,
-            pagina=1,
-            x=Decimal("0.1"),
-            y=Decimal("0.1"),
-            ancho=Decimal("0.2"),
-            alto=Decimal("0.1"),
-        )
+        for index, asignado in enumerate(envio.destinatarios.order_by("pk")):
+            CampoFirma.objects.create(
+                destinatario=asignado,
+                pagina=1,
+                x=Decimal("0.1") + Decimal("0.3") * index,
+                y=Decimal("0.1"),
+                ancho=Decimal("0.2"),
+                alto=Decimal("0.1"),
+            )
         return envio, destinatario
 
-    def test_presidente_envia_documento_a_integrantes_activos_sin_incluirse(self):
+    def test_presidente_envia_documento_incluyendose_como_primer_firmante(self):
         self.preparar_envio_con_campo()
         response = self.client.post(reverse("documentos:send", args=[self.documento.pk]))
 
@@ -327,10 +328,12 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(envio.estado, EnvioDocumento.Estado.ENVIADO)
         self.assertQuerySetEqual(
             envio.destinatarios.values_list("usuario_id", flat=True),
-            [self.miembro.pk],
+            [self.presidente.pk, self.miembro.pk],
             ordered=False,
         )
-        self.assertFalse(envio.destinatarios.filter(usuario=self.presidente).exists())
+        presidente_destinatario = envio.destinatarios.get(usuario=self.presidente)
+        self.assertEqual(presidente_destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertTrue(presidente_destinatario.campos_firma.exists())
         self.assertFalse(envio.destinatarios.filter(usuario=self.inactivo).exists())
 
     def test_pantallas_reales_muestran_documento_comite_e_integrantes(self):
@@ -370,7 +373,8 @@ class EnvioDocumentoTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(destinatario.usuario))
-        self.assertContains(response, "Firma en página 1")
+        self.assertContains(response, "1 campo de firma")
+        self.assertContains(response, "Firma primero")
         self.assertTrue(response.context["listo_para_enviar"])
 
     def test_restriccion_impide_destinatario_duplicado_en_un_envio(self):
@@ -387,7 +391,7 @@ class EnvioDocumentoTests(TestCase):
         self.client.post(url)
 
         self.assertEqual(EnvioDocumento.objects.count(), 1)
-        self.assertEqual(DestinatarioDocumento.objects.count(), 1)
+        self.assertEqual(DestinatarioDocumento.objects.count(), 2)
 
     def test_usuario_no_presidente_no_puede_enviar(self):
         documento = Documento.objects.create(
@@ -487,6 +491,38 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(DestinatarioDocumento.objects.exists())
 
+    def test_preparacion_historica_agrega_presidente_antes_de_enviar(self):
+        envio = EnvioDocumento.objects.create(
+            documento=self.documento,
+            remitente=self.presidente,
+            estado=EnvioDocumento.Estado.PREPARACION,
+        )
+        miembro = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.miembro,
+            estado=DestinatarioDocumento.Estado.BORRADOR,
+        )
+        CampoFirma.objects.create(
+            destinatario=miembro,
+            pagina=1,
+            x=Decimal("0.1"),
+            y=Decimal("0.1"),
+            ancho=Decimal("0.2"),
+            alto=Decimal("0.1"),
+        )
+        self.client.force_login(self.presidente)
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk]), follow=True
+        )
+
+        presidente = envio.destinatarios.get(usuario=self.presidente)
+        envio.refresh_from_db()
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertEqual(presidente.estado, DestinatarioDocumento.Estado.BORRADOR)
+        self.assertContains(response, str(self.presidente))
+        self.assertContains(response, "Sin campo de firma")
+
     def test_get_editor_no_elimina_destinatarios_ni_campos(self):
         self.preparar_destinatarios()
         envio = EnvioDocumento.objects.get(documento=self.documento)
@@ -532,6 +568,7 @@ class EnvioDocumentoTests(TestCase):
             reverse("documentos:document_editor", args=[self.documento.pk]),
         )
         self.assertTrue(envio.destinatarios.filter(usuario=self.miembro).exists())
+        self.assertTrue(envio.destinatarios.filter(usuario=self.presidente).exists())
         self.assertFalse(envio.destinatarios.filter(usuario=self.inactivo).exists())
 
         destinatario_externo = DestinatarioDocumento.objects.create(
@@ -696,6 +733,10 @@ class CampoFirmaTests(TestCase):
             envio__documento=self.documento,
             usuario=self.no_autorizado,
         )
+        self.propietario_destinatario = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento,
+            usuario=self.propietario,
+        )
 
         self.client.force_login(self.otro_presidente)
         self.client.post(
@@ -763,6 +804,12 @@ class CampoFirmaTests(TestCase):
                 y=0.1,
                 recipient_id=self.destinatario_no_autorizado.pk,
             ),
+            self.datos_campo(
+                page=1,
+                x=0.4,
+                y=0.1,
+                recipient_id=self.propietario_destinatario.pk,
+            ),
         ]
 
     def test_editor_real_muestra_documento_destinatarios_y_urls_backend(self):
@@ -808,24 +855,11 @@ class CampoFirmaTests(TestCase):
         self.assertEqual(campo.x, Decimal("0.100000"))
         self.assertEqual(campo.ancho, Decimal("0.250000"))
 
-    def test_un_destinatario_no_admite_dos_campos(self):
+    def test_un_destinatario_admite_multiples_campos(self):
         response = self.guardar([self.datos_campo(), self.datos_campo(x=0.2)])
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("un solo campo", response.json()["error"])
-        self.assertEqual(CampoFirma.objects.count(), 0)
-
-        self.guardar([self.datos_campo()])
-
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            CampoFirma.objects.create(
-                destinatario=self.destinatario,
-                pagina=1,
-                x=Decimal("0.1"),
-                y=Decimal("0.1"),
-                ancho=Decimal("0.2"),
-                alto=Decimal("0.1"),
-            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CampoFirma.objects.filter(destinatario=self.destinatario).count(), 2)
 
     def test_campo_omitido_se_elimina(self):
         self.guardar([self.datos_campo()])
@@ -937,7 +971,7 @@ class CampoFirmaTests(TestCase):
         self.assertEqual(self.destinatario.envio.estado, EnvioDocumento.Estado.ENVIADO)
         self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
         self.assertEqual(self.destinatario.campos_firma.count(), 1)
-        self.assertEqual(CampoFirma.objects.count(), 2)
+        self.assertEqual(CampoFirma.objects.count(), 3)
 
         self.client.force_login(self.destinatario_usuario)
         self.assertContains(self.client.get(reverse("documentos:user_pending")), "campos.pdf")
@@ -1681,7 +1715,7 @@ class DocumentoResultadoTests(TestCase):
         envio, _ = self._crear_envio()
         self._agregar_firmante(envio, self.usuario_a, campo=False)
 
-        with self.assertRaisesRegex(ResultadoPDFError, "exactamente un campo"):
+        with self.assertRaisesRegex(ResultadoPDFError, "al menos un campo"):
             generar_resultado_si_completo(envio.pk)
         self.assertFalse(DocumentoResultado.objects.exists())
 

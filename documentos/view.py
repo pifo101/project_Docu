@@ -42,7 +42,6 @@ def _integrantes_del_comite(request):
     return (
         request.user.comite.usuarios
         .filter(is_active=True)
-        .exclude(pk=request.user.pk)
         .select_related("cargo")
         .order_by("first_name", "last_name", "email")
     )
@@ -147,14 +146,21 @@ def send_review_view(request, pk):
         .prefetch_related("campos_firma")
         .order_by("usuario__first_name", "usuario__last_name", "usuario__email")
     )
-    campos_asignados = sum(bool(destinatario.campos_firma.all()) for destinatario in destinatarios)
+    destinatarios_con_campo = sum(
+        bool(destinatario.campos_firma.all()) for destinatario in destinatarios
+    )
+    campos_asignados = sum(
+        len(destinatario.campos_firma.all()) for destinatario in destinatarios
+    )
     return render(request, "documentos/review.html", {
         "documento": documento,
         "envio": envio,
         "comite": request.user.comite,
         "destinatarios": destinatarios,
         "campos_asignados": campos_asignados,
-        "listo_para_enviar": bool(destinatarios) and campos_asignados == len(destinatarios),
+        "listo_para_enviar": (
+            bool(destinatarios) and destinatarios_con_campo == len(destinatarios)
+        ),
     })
 
 
@@ -178,6 +184,11 @@ def send_document_view(request, pk):
             messages.info(request, "Este documento ya fue enviado al comité.")
             return redirect("documentos:document_detail", pk=documento.pk)
 
+        DestinatarioDocumento.objects.get_or_create(
+            envio=envio,
+            usuario=envio.remitente,
+            defaults={"estado": DestinatarioDocumento.Estado.BORRADOR},
+        )
         destinatarios = list(
             envio.destinatarios.select_for_update().select_related(
                 "usuario__comite"
@@ -278,18 +289,21 @@ def download_document_view(request, pk):
 
 @login_required
 def received_document_view(request, pk):
-    destinatario = get_object_or_404(
-        DestinatarioDocumento.objects.select_related("envio__documento"),
-        pk=pk,
-        usuario=request.user,
-        envio__estado=EnvioDocumento.Estado.ENVIADO,
-    )
+    with transaction.atomic():
+        destinatario = get_object_or_404(
+            DestinatarioDocumento.objects.select_for_update().select_related(
+                "envio__documento"
+            ),
+            pk=pk,
+            usuario=request.user,
+            envio__estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        if destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
+            destinatario.estado = DestinatarioDocumento.Estado.VISTO
+            destinatario.fecha_visualizacion = timezone.now()
+            destinatario.save(update_fields=("estado", "fecha_visualizacion"))
     documento = destinatario.envio.documento
     archivo = documento.archivo.open("rb")
-    if destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
-        destinatario.estado = DestinatarioDocumento.Estado.VISTO
-        destinatario.fecha_visualizacion = timezone.now()
-        destinatario.save(update_fields=("estado", "fecha_visualizacion"))
 
     return FileResponse(
         archivo,
@@ -362,7 +376,11 @@ def document_editor_view(request, pk):
         "destinatarios_editor": [
             {
                 "id": destinatario.pk,
-                "name": str(destinatario.usuario),
+                "name": (
+                    f"{destinatario.usuario} (Presidente, firma primero)"
+                    if destinatario.usuario_id == envio.remitente_id
+                    else str(destinatario.usuario)
+                ),
                 "email": destinatario.usuario.email,
             }
             for destinatario in destinatarios
@@ -406,7 +424,6 @@ def signature_fields_view(request, pk):
     }
     campos_existentes = {campo.pk: campo for campo in campos}
     ids_recibidos = set()
-    destinatarios_recibidos = set()
     campos_validados = []
 
     for datos in datos_campos:
@@ -424,13 +441,6 @@ def signature_fields_view(request, pk):
         destinatario_id = datos.get("recipient_id")
         if isinstance(destinatario_id, bool) or not isinstance(destinatario_id, int) or destinatario_id not in destinatarios:
             return JsonResponse({"error": "El destinatario no pertenece al documento."}, status=400)
-        if destinatario_id in destinatarios_recibidos:
-            return JsonResponse(
-                {"error": "Cada destinatario puede tener un solo campo de firma."},
-                status=400,
-            )
-        destinatarios_recibidos.add(destinatario_id)
-
         pagina = datos.get("page")
         if isinstance(pagina, bool) or not isinstance(pagina, int) or not 1 <= pagina <= total_paginas:
             return JsonResponse({"error": "La página indicada no es válida."}, status=400)
