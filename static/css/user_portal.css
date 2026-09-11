@@ -7,18 +7,36 @@
 }
 
 .user-sidebar__logout button {
+    display: flex;
     width: 100%;
-    padding: 10px;
+    min-height: 42px;
+    padding: 0 12px;
+    align-items: center;
+    gap: 10px;
     border: 0;
+    border-radius: 10px;
     color: rgba(255, 255, 255, 0.7);
     background: transparent;
+    font: inherit;
+    font-size: 12px;
     cursor: pointer;
+    transition: color 150ms ease, background 150ms ease;
 }
 
 .user-sidebar__logout button:hover,
 .user-sidebar__logout button:focus-visible {
     color: white;
-    text-decoration: underline;
+    background: rgba(255, 255, 255, 0.13);
+}
+
+.user-sidebar__logout svg {
+    width: 20px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.7;
 }
 
 .user-account-link,

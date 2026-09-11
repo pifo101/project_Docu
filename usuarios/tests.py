@@ -134,6 +134,8 @@ class ProfileIdentityTests(TestCase):
         self.assertContains(response, self.usuario_a.cargo.nombre)
         self.assertContains(response, "2 integrantes activos")
         self.assertEqual(response.context["active_committee_member_count"], 2)
+        self.assertContains(response, 'class="profile-data-grid"')
+        self.assertContains(response, 'class="profile-account-state"')
         for mock_value in (
             "Andrea",
             "Morales",
@@ -169,6 +171,7 @@ class ProfileIdentityTests(TestCase):
         self.assertEqual(response.context["pending_count"], 0)
         self.assertContains(response, f'action="{reverse("usuarios:logout")}"')
         self.assertContains(response, 'method="post"')
+        self.assertContains(response, 'class="user-sidebar__logout"')
 
 
 class RegistroUsuarioTests(TestCase):

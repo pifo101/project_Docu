@@ -5,7 +5,7 @@
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/documents.css' %}"><link rel="stylesheet" href="{% static 'css/user_portal.css' %}">{% endblock %}
 {% block content %}
 <div class="dashboard-shell">
-    {% if selected_status == "pendientes" %}{% include "documentos/includes/user_sidebar.html" with active_section="pending" %}{% elif selected_status == "completados" %}{% include "documentos/includes/user_sidebar.html" with active_section="completed" %}{% else %}{% include "documentos/includes/user_sidebar.html" with active_section="documents" %}{% endif %}
+    {% if request.user.cargo_id == 'PRESIDENTE' %}{% include "documentos/includes/app_sidebar.html" with active_section="received_documents" %}{% elif selected_status == "pendientes" %}{% include "documentos/includes/user_sidebar.html" with active_section="pending" %}{% elif selected_status == "completados" %}{% include "documentos/includes/user_sidebar.html" with active_section="completed" %}{% else %}{% include "documentos/includes/user_sidebar.html" with active_section="documents" %}{% endif %}
     <div class="dashboard-main">
         <header class="dashboard-header"><button class="menu-toggle" type="button" aria-label="Abrir navegación" aria-controls="dashboard-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="dashboard-header__title"><span class="mobile-logo">ADICLA <strong>Sign</strong></span><p>Documentos recibidos</p></div><a class="user-account-link" href="{% url 'usuarios:profile' %}">Mi cuenta</a></header>
         <main class="dashboard-content documents-content user-portal-content">
