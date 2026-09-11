@@ -31,6 +31,7 @@
 
 .user-sidebar__logout svg {
     width: 20px;
+    height: 20px;
     flex: 0 0 auto;
     fill: none;
     stroke: currentColor;

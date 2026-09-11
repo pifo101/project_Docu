@@ -46,6 +46,10 @@ class AuthPagesTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inicia sesión")
+        self.assertNotContains(
+            response,
+            f'action="{reverse("usuarios:resend_verification")}"',
+        )
 
     def test_register_page_renders(self):
         response = self.client.get(reverse("usuarios:register"))
@@ -463,6 +467,7 @@ class VerificacionEmailTests(TestCase):
         usuario.refresh_from_db()
 
         self.assertEqual(confirmacion.status_code, 200)
+        self.assertContains(confirmacion, "verification-card--pending")
         self.assertFalse(usuario.email_verificado)
         self.assertIn("no-store", confirmacion["Cache-Control"])
         self.assertEqual(confirmacion["Referrer-Policy"], "no-referrer")
@@ -471,6 +476,7 @@ class VerificacionEmailTests(TestCase):
         usuario.refresh_from_db()
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "verification-card--success")
         self.assertTrue(usuario.email_verificado)
         self.assertIsNotNone(usuario.fecha_verificacion_email)
         self.assertTrue(response.wsgi_request.user.email_verificado)
@@ -486,7 +492,13 @@ class VerificacionEmailTests(TestCase):
         usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
 
         ruta_alterada = f"{ruta.rstrip('/')}alterado/"
-        self.assertEqual(self.client.get(ruta_alterada).status_code, 400)
+        respuesta_alterada = self.client.get(ruta_alterada)
+        self.assertEqual(respuesta_alterada.status_code, 400)
+        self.assertContains(
+            respuesta_alterada,
+            "verification-card--error",
+            status_code=400,
+        )
         with self.settings(EMAIL_VERIFICATION_TIMEOUT=-1):
             self.assertEqual(self.client.get(ruta).status_code, 400)
         usuario.refresh_from_db()
@@ -575,9 +587,12 @@ class VerificacionEmailTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("usuarios:dashboard"))
+        pending_response = self.client.get(reverse("usuarios:dashboard"))
+        self.assertContains(pending_response, "Tu cuenta necesita verificación")
+        self.assertContains(pending_response, "pendiente@adicla.org.gt")
         self.assertContains(
-            self.client.get(reverse("usuarios:dashboard")),
-            "Verifica tu correo",
+            pending_response,
+            f'action="{reverse("usuarios:resend_verification")}"',
         )
         self.assertContains(
             self.client.get(reverse("usuarios:profile")),

@@ -3,23 +3,29 @@
 {% block title %}Verifica tu correo | ADICLA Sign{% endblock %}
 
 {% block content %}
-<main class="auth-shell">
-    <section class="form-panel">
-        <div class="form-card">
-            <div class="form-card__heading">
+<main class="auth-shell auth-shell--verification">
+    <section class="form-panel verification-panel" aria-labelledby="verification-title">
+        <div class="form-card verification-card">
+            <a class="verification-brand" href="{% url 'usuarios:login' %}" aria-label="ADICLA Sign, inicio">ADICLA <strong>Sign</strong></a>
+            <span class="verification-icon verification-icon--pending" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3zM3 7l9 7 9-7"/><path d="M17 4v4M15 6h4"/></svg></span>
+            <div class="form-card__heading verification-heading">
                 <p class="overline">Cuenta pendiente</p>
-                <h2>Verifica tu correo</h2>
-                <p>Debes confirmar tu correo institucional antes de acceder a documentos y firmas.</p>
+                <h1 id="verification-title">Tu cuenta necesita verificación</h1>
+                <p>Enviamos un enlace de confirmación a tu correo institucional. Verifícalo antes de acceder a documentos y firmas.</p>
             </div>
-            <form method="post" action="{% url 'usuarios:resend_verification' %}" class="auth-form">
-                {% csrf_token %}
-                <input type="hidden" name="email" value="{{ request.user.email }}">
-                <button class="primary-button" type="submit">Reenviar correo de verificación</button>
-            </form>
-            <form method="post" action="{% url 'usuarios:logout' %}" class="auth-form">
-                {% csrf_token %}
-                <button class="primary-button" type="submit">Cerrar sesión</button>
-            </form>
+            <p class="verification-email"><span>Correo registrado</span><strong>{{ request.user.email }}</strong></p>
+            <div class="verification-actions">
+                <form method="post" action="{% url 'usuarios:resend_verification' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="email" value="{{ request.user.email }}">
+                    <button class="primary-button" type="submit">Reenviar correo de verificación</button>
+                </form>
+                <form method="post" action="{% url 'usuarios:logout' %}">
+                    {% csrf_token %}
+                    <button class="secondary-auth-button" type="submit">Volver al inicio de sesión</button>
+                </form>
+            </div>
+            <p class="verification-help">Si no encuentras el mensaje, revisa la carpeta de correo no deseado.</p>
         </div>
     </section>
 </main>

@@ -527,8 +527,24 @@ class EnvioDocumentoTests(TestCase):
             self.assertContains(response, str(self.miembro))
             self.assertNotContains(response, str(self.inactivo))
             self.assertNotContains(response, str(self.usuario_externo))
-            self.assertContains(response, f'action="{reverse("usuarios:logout")}"')
-            self.assertContains(response, 'method="post"')
+            self.assertNotContains(response, f'action="{reverse("usuarios:logout")}"')
+
+    def test_workflow_no_muestra_logout_en_sus_headers(self):
+        self.preparar_destinatarios()
+
+        for nombre_ruta in (
+            "committee_recipients",
+            "document_editor",
+            "send_review",
+        ):
+            response = self.client.get(
+                reverse(f"documentos:{nombre_ruta}", args=[self.documento.pk])
+            )
+            self.assertNotContains(response, 'class="session-logout"')
+            self.assertNotContains(
+                response,
+                f'action="{reverse("usuarios:logout")}"',
+            )
 
     def test_listado_usa_estado_y_rutas_del_envio_real(self):
         self.preparar_envio_con_campo()

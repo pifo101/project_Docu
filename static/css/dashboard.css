@@ -58,6 +58,7 @@
 
 .sidebar__nav {
     display: grid;
+    min-width: 0;
     gap: 7px;
 }
 
@@ -109,7 +110,12 @@
     background: var(--color-accent);
 }
 
+.nav-group {
+    min-width: 0;
+}
+
 .nav-group summary {
+    width: 100%;
     list-style: none;
     cursor: pointer;
 }
@@ -127,8 +133,8 @@
     min-width: 0;
 }
 
-.nav-group__chevron {
-    width: 16px !important;
+.nav-group__toggle .nav-group__chevron {
+    width: 16px;
     margin-left: auto;
     transition: transform 150ms ease;
 }
@@ -147,6 +153,10 @@
     padding-left: 14px;
     gap: 3px;
     border-left: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.nav-group:not([open]) .nav-group__items {
+    display: none;
 }
 
 .nav-group__link {
@@ -169,6 +179,12 @@
 
 .nav-group__link--active {
     box-shadow: inset 3px 0 var(--color-accent);
+}
+
+.nav-group summary:focus-visible,
+.nav-group__link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
 }
 
 .profile-chip {
@@ -249,6 +265,7 @@
 
 .app-sidebar__logout svg {
     width: 20px;
+    height: 20px;
     flex: 0 0 auto;
     fill: none;
     stroke: currentColor;
