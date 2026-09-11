@@ -7,23 +7,18 @@
         <nav class="sidebar__nav" aria-label="Navegación principal">
             <a class="nav-link{% if active_section == 'dashboard' %} nav-link--active{% endif %}" href="{% url 'usuarios:dashboard' %}"{% if active_section == 'dashboard' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Resumen</a>
             {% if request.user.cargo_id == 'PRESIDENTE' %}
-            <details class="nav-group"{% if active_section == 'documents' or active_section == 'received_documents' %} open{% endif %}>
-                <summary class="nav-link nav-group__toggle{% if active_section == 'documents' or active_section == 'received_documents' %} nav-group__toggle--active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg><span>Documentos</span>{% if owned_document_count %}<span class="nav-link__count">{{ owned_document_count }}</span>{% endif %}<svg class="nav-group__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></summary>
-                <div class="nav-group__items">
-                    <a class="nav-group__link{% if active_section == 'documents' %} nav-group__link--active{% endif %}" href="{% url 'documentos:list' %}"{% if active_section == 'documents' %} aria-current="page"{% endif %}>Documentos enviados</a>
-                    <a class="nav-group__link{% if active_section == 'received_documents' %} nav-group__link--active{% endif %}" href="{% url 'documentos:user_documents' %}"{% if active_section == 'received_documents' %} aria-current="page"{% endif %}>Documentos recibidos</a>
-                </div>
-            </details>
+            <a class="nav-link{% if active_section == 'documents' %} nav-link--active{% endif %}" href="{% url 'documentos:list' %}"{% if active_section == 'documents' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg>Enviados{% if sent_document_count %}<span class="nav-link__count">{{ sent_document_count }}</span>{% endif %}</a>
+            <a class="nav-link{% if active_section == 'received_documents' %} nav-link--active{% endif %}" href="{% url 'documentos:user_documents' %}"{% if active_section == 'received_documents' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M5 19h14"/></svg>Recibidos</a>
             {% else %}
             <a class="nav-link{% if active_section == 'documents' %} nav-link--active{% endif %}" href="{% url 'documentos:list' %}"{% if active_section == 'documents' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6"/></svg>Documentos{% if owned_document_count %}<span class="nav-link__count">{{ owned_document_count }}</span>{% endif %}</a>
-            {% endif %}
             <a class="nav-link{% if active_section == 'pending' %} nav-link--active{% endif %}" href="{% url 'documentos:user_pending' %}"{% if active_section == 'pending' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2"/></svg>Pendientes{% if recipient_pending_count %}<span class="nav-link__count nav-link__count--accent">{{ recipient_pending_count }}</span>{% endif %}</a>
+            {% endif %}
         </nav>
     </div>
     <div class="sidebar__bottom">
         {% if request.user.is_authenticated %}
         <a class="profile-chip{% if active_section == 'profile' %} profile-chip--active{% endif %}" href="{% url 'usuarios:profile' %}"{% if active_section == 'profile' %} aria-current="page"{% endif %}><span class="profile-chip__avatar">{{ request.user.first_name|first|default:"U" }}{{ request.user.last_name|first }}</span><span class="profile-chip__copy"><strong>{{ request.user.get_full_name|default:request.user.email }}</strong><small>{{ request.user.cargo.nombre|default:"Usuario" }}</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>
-        <form class="app-sidebar__logout" method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/></svg><span>Cerrar sesión</span></button></form>
+        <form class="app-sidebar__logout" method="post" action="{% url 'usuarios:logout' %}">{% csrf_token %}<button class="nav-link app-sidebar__logout-button" type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/></svg><span>Cerrar sesión</span></button></form>
         {% else %}
         <a class="profile-chip" href="{% url 'usuarios:login' %}"><span class="profile-chip__avatar">U</span><span class="profile-chip__copy"><strong>Iniciar sesión</strong><small>Acceso al flujo real</small></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>
         {% endif %}

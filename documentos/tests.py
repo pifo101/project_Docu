@@ -132,21 +132,43 @@ class DocumentsPageTests(TestCase):
             self.assertContains(response, 'method="post"')
             self.assertContains(response, 'name="csrfmiddlewaretoken"')
             self.assertContains(response, 'class="app-sidebar__logout"')
+            self.assertContains(response, 'class="nav-link app-sidebar__logout-button"')
 
-    def test_president_documents_menu_reuses_sent_and_received_routes(self):
+    def test_president_navigation_uses_primary_sent_and_received_routes(self):
         self.client.force_login(self.presidente)
 
-        for route_name, active_section in (
+        for route_name, label in (
             ("usuarios:dashboard", None),
-            ("documentos:list", "Documentos enviados"),
-            ("documentos:user_documents", "Documentos recibidos"),
+            ("documentos:list", "Enviados"),
+            ("documentos:user_documents", "Recibidos"),
         ):
             response = self.client.get(reverse(route_name))
-            self.assertContains(response, 'class="nav-group"')
+            self.assertNotContains(response, "<details")
+            self.assertNotContains(response, "<summary")
+            self.assertNotContains(response, "nav-group")
             self.assertContains(response, f'href="{reverse("documentos:list")}"')
             self.assertContains(response, f'href="{reverse("documentos:user_documents")}"')
-            if active_section:
-                self.assertContains(response, f'aria-current="page">{active_section}</a>')
+            self.assertContains(response, ">Enviados")
+            self.assertContains(response, ">Recibidos")
+            self.assertContains(response, 'class="nav-link app-sidebar__logout-button"')
+            if label:
+                self.assertContains(
+                    response,
+                    f'class="nav-link nav-link--active" href="{reverse(route_name)}" '
+                    'aria-current="page"',
+                )
+
+    def test_presidente_no_muestra_pendientes_como_opcion_independiente(self):
+        self.client.force_login(self.presidente)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertContains(response, ">Resumen</a>")
+        self.assertContains(response, ">Enviados</a>")
+        self.assertContains(response, ">Recibidos</a>")
+        self.assertNotContains(response, "<details")
+        self.assertNotContains(response, "nav-group")
+        self.assertNotContains(response, ">Pendientes</a>")
 
     def test_administrator_keeps_simple_navigation_and_local_logout_style(self):
         self.client.force_login(self.administrador)
@@ -156,6 +178,7 @@ class DocumentsPageTests(TestCase):
         self.assertContains(response, 'class="app-sidebar__logout"')
         self.assertContains(response, f'href="{reverse("documentos:list")}"')
         self.assertNotContains(response, 'class="nav-group"')
+        self.assertContains(response, ">Pendientes</a>")
 
     def test_sender_dashboard_counts_come_from_real_records(self):
         pendiente = Documento.objects.create(
@@ -208,7 +231,8 @@ class DocumentsPageTests(TestCase):
 
         for route_name in ("usuarios:dashboard", "usuarios:profile", "documentos:list"):
             response = self.client.get(reverse(route_name))
-            self.assertContains(response, f'href="{reverse("documentos:user_pending")}"')
+            self.assertContains(response, f'href="{reverse("documentos:user_documents")}"')
+            self.assertNotContains(response, f'href="{reverse("documentos:user_pending")}"')
             self.assertNotContains(response, f'href="{reverse("documentos:pending")}"')
             for demo_url in demo_urls:
                 self.assertNotContains(response, f'href="{demo_url}')
