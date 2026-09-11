@@ -9,8 +9,11 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from auditoria.models import EventoAuditoria
+from auditoria.services import registrar_evento
 from documentos.models import DestinatarioDocumento, EnvioDocumento
 from documentos.services import ResultadoPDFError, generar_resultado_si_completo
+from usuarios.decorators import email_verificado_required
 
 from .forms import FirmaForm, FirmaPerfilForm
 from .models import Firma, FirmaPerfil
@@ -18,7 +21,11 @@ from .models import Firma, FirmaPerfil
 
 def _intentar_generar_resultado(request, envio_id):
     try:
-        return generar_resultado_si_completo(envio_id)
+        return generar_resultado_si_completo(
+            envio_id,
+            actor=request.user,
+            request=request,
+        )
     except ResultadoPDFError:
         messages.warning(request, "No se pudo generar el PDF resultante.")
         return None
@@ -76,6 +83,7 @@ def completed_view(request):
 
 
 @login_required
+@email_verificado_required
 @require_POST
 def profile_signature_save_view(request):
     form = FirmaPerfilForm(request.POST, request.FILES)
@@ -98,6 +106,7 @@ def profile_signature_save_view(request):
 
 
 @login_required
+@email_verificado_required
 @require_POST
 def profile_signature_delete_view(request):
     FirmaPerfil.objects.filter(usuario=request.user).delete()
@@ -106,6 +115,7 @@ def profile_signature_delete_view(request):
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def profile_signature_preview_view(request):
     firma_perfil = get_object_or_404(FirmaPerfil, usuario=request.user)
@@ -117,6 +127,7 @@ def profile_signature_preview_view(request):
 
 
 @login_required
+@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def recipient_sign_view(request, pk):
     destinatario = get_object_or_404(
@@ -169,6 +180,12 @@ def recipient_sign_view(request, pk):
                 destinatario.estado = DestinatarioDocumento.Estado.VISTO
                 destinatario.fecha_visualizacion = timezone.now()
                 destinatario.save(update_fields=("estado", "fecha_visualizacion"))
+                registrar_evento(
+                    tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+                    envio=destinatario.envio,
+                    request=request,
+                    informacion_adicional={"destinatario_id": destinatario.pk},
+                )
             elif destinatario.estado == DestinatarioDocumento.Estado.VISTO:
                 ya_firmado = False
             else:
@@ -212,6 +229,9 @@ def recipient_sign_view(request, pk):
                     ):
                         form.add_error(None, "El documento no se encuentra en un estado válido para firmar.")
                     else:
+                        visualizacion_nueva = (
+                            bloqueado.estado == DestinatarioDocumento.Estado.PENDIENTE
+                        )
                         if bloqueado.estado == DestinatarioDocumento.Estado.PENDIENTE:
                             bloqueado.fecha_visualizacion = timezone.now()
                         if form.cleaned_data["metodo"] == Firma.Metodo.PERFIL:
@@ -234,7 +254,7 @@ def recipient_sign_view(request, pk):
                             imagen = form.cleaned_data["firma"]
                             formato = "image/png"
                         if not form.errors:
-                            Firma.objects.create(
+                            firma = Firma.objects.create(
                                 destinatario=bloqueado,
                                 imagen=imagen,
                                 formato=formato,
@@ -243,6 +263,23 @@ def recipient_sign_view(request, pk):
                             )
                             bloqueado.estado = DestinatarioDocumento.Estado.FIRMADO
                             bloqueado.save(update_fields=("estado", "fecha_visualizacion"))
+                            if visualizacion_nueva:
+                                registrar_evento(
+                                    tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+                                    envio=bloqueado.envio,
+                                    request=request,
+                                    informacion_adicional={"destinatario_id": bloqueado.pk},
+                                )
+                            registrar_evento(
+                                tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA,
+                                envio=bloqueado.envio,
+                                request=request,
+                                informacion_adicional={
+                                    "destinatario_id": bloqueado.pk,
+                                    "firma_id": firma.pk,
+                                    "metodo": firma.metodo,
+                                },
+                            )
                             envio_id = bloqueado.envio_id
             except IntegrityError:
                 if Firma.objects.filter(destinatario_id=pk).exists():

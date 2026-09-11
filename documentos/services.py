@@ -10,6 +10,9 @@ from pypdf.errors import PdfReadError
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
+from auditoria.models import EventoAuditoria
+from auditoria.services import registrar_evento
+
 from .models import (
     DestinatarioDocumento,
     Documento,
@@ -164,7 +167,7 @@ def construir_pdf_resultado(envio):
         raise ResultadoPDFError("No se pudo generar el PDF resultante.") from error
 
 
-def generar_resultado_si_completo(envio_id):
+def generar_resultado_si_completo(envio_id, actor=None, request=None):
     saved_name = None
     storage = DocumentoResultado._meta.get_field("archivo").storage
     try:
@@ -189,6 +192,16 @@ def generar_resultado_si_completo(envio_id):
             resultado.archivo.save("resultado.pdf", ContentFile(pdf), save=False)
             saved_name = resultado.archivo.name
             resultado.save(force_insert=True)
+            registrar_evento(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO,
+                envio=envio,
+                actor=actor,
+                request=request,
+                informacion_adicional={
+                    "resultado_id": resultado.pk,
+                    "cantidad_firmantes": envio.destinatarios.count(),
+                },
+            )
             return resultado
     except IntegrityError:
         if saved_name:

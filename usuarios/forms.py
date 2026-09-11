@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from .models import (
+    Cargo,
     Comite,
     Usuario,
     normalize_institutional_email,
@@ -88,6 +89,30 @@ class RegistroUsuarioForm(forms.ModelForm):
             user.save()
             self.save_m2m()
         return user
+
+
+class RegistroPublicoUsuarioForm(RegistroUsuarioForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cargo"].queryset = Cargo.objects.filter(es_directivo=False)
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email_verificado = False
+        user.fecha_verificacion_email = None
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
+
+
+class ReenvioVerificacionForm(forms.Form):
+    email = forms.EmailField(label="Correo institucional")
+
+    def clean_email(self):
+        email = normalize_institutional_email(self.cleaned_data["email"])
+        validate_institutional_email(email)
+        return email
 
 
 class LoginUsuarioForm(forms.Form):

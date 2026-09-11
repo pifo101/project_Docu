@@ -13,11 +13,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from pypdf import PdfReader, PdfWriter
 
+from auditoria.models import EventoAuditoria
 from documentos.models import (
     CampoFirma,
     DestinatarioDocumento,
@@ -137,6 +138,20 @@ class FirmaPerfilTests(TestCase):
         for route, method in routes:
             response = getattr(self.client, method)(reverse(f"firmas:{route}"))
             self.assertEqual(response.status_code, 302)
+
+    def test_usuario_no_verificado_no_puede_gestionar_firma_de_perfil(self):
+        self.usuario.email_verificado = False
+        self.usuario.save(update_fields=("email_verificado",))
+        self.client.force_login(self.usuario)
+
+        self.assertEqual(
+            self.client.post(
+                reverse("firmas:profile_save"),
+                {"imagen": SimpleUploadedFile("firma.png", png_bytes())},
+            ).status_code,
+            403,
+        )
+        self.assertFalse(FirmaPerfil.objects.filter(usuario=self.usuario).exists())
 
     def test_archivo_vacio_se_rechaza(self):
         self._upload(content=b"")
@@ -387,6 +402,22 @@ class FirmaFlujoTests(TestCase):
         self.assertContains(response, 'class="recipient-viewer recipient-viewer--protected"')
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        evento = EventoAuditoria.objects.get(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        )
+        self.assertEqual(evento.envio, self.envio)
+        self.assertEqual(evento.actor, self.destinatario)
+
+        segunda_apertura = self.client.get(self.url)
+        self.assertEqual(segunda_apertura.status_code, 200)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+                envio=self.envio,
+                actor=self.destinatario,
+            ).count(),
+            1,
+        )
 
     def test_flujo_real_no_habilita_fallback_de_documento_demo(self):
         self.client.force_login(self.destinatario)
@@ -471,6 +502,52 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(self.client.get(self.url).status_code, 404)
         self.assertEqual(self.client.post(self.url, {"firma": png_data_url()}).status_code, 404)
 
+    def test_destinatario_no_puede_usar_identificador_de_otra_asignacion(self):
+        solicitud_ajena = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.no_destinatario,
+        )
+        CampoFirma.objects.create(
+            destinatario=solicitud_ajena,
+            pagina=1,
+            x=Decimal("0.4"),
+            y=Decimal("0.2"),
+            ancho=Decimal("0.3"),
+            alto=Decimal("0.1"),
+        )
+        url_ajena = reverse("firmas:recipient_sign", args=[solicitud_ajena.pk])
+        self.client.force_login(self.destinatario)
+
+        self.assertEqual(self.client.get(url_ajena).status_code, 404)
+        self.assertEqual(
+            self.client.post(
+                url_ajena,
+                {
+                    "metodo": Firma.Metodo.DIBUJADA,
+                    "firma": png_data_url(),
+                    "consentimiento": "1",
+                },
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[solicitud_ajena.pk])
+            ).status_code,
+            404,
+        )
+        self.assertFalse(Firma.objects.filter(destinatario=solicitud_ajena).exists())
+        self.assertFalse(EventoAuditoria.objects.exists())
+
+    def test_parametro_token_no_sustituye_la_asignacion_autenticada(self):
+        self.client.force_login(self.no_destinatario)
+
+        self.assertEqual(
+            self.client.get(self.url, {"token": "alterado-o-expirado"}).status_code,
+            404,
+        )
+        self.assertFalse(Firma.objects.exists())
+
     def test_usuario_de_otro_comite_no_puede_acceder_ni_abrir_pdf(self):
         self.client.force_login(self.externo)
         self.assertEqual(self.client.get(self.url).status_code, 404)
@@ -529,6 +606,12 @@ class FirmaFlujoTests(TestCase):
         self.assertTrue(bytes(firma.imagen).startswith(b"\x89PNG"))
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        evento = EventoAuditoria.objects.get(tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA)
+        self.assertEqual(evento.documento, self.documento)
+        self.assertEqual(evento.envio, self.envio)
+        self.assertEqual(evento.actor, self.destinatario)
+        self.assertNotIn("imagen", evento.informacion_adicional)
+        self.assertNotIn("token", evento.informacion_adicional)
 
     def test_ultima_firma_genera_pdf_resultante_automaticamente(self):
         self._usar_pdf_valido()
@@ -539,6 +622,9 @@ class FirmaFlujoTests(TestCase):
         resultado = DocumentoResultado.objects.get(envio=self.envio)
         with resultado.archivo.open("rb") as archivo:
             self.assertTrue(archivo.read().startswith(b"%PDF-"))
+        evento = EventoAuditoria.objects.get(tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO)
+        self.assertEqual(evento.envio, self.envio)
+        self.assertEqual(evento.actor, self.destinatario)
 
     def test_resultado_solo_se_genera_despues_del_ultimo_destinatario(self):
         self._usar_pdf_valido(paginas=3)
@@ -669,6 +755,7 @@ class FirmaFlujoTests(TestCase):
         self.assertFalse(Firma.objects.exists())
 
     def test_no_se_puede_firmar_dos_veces(self):
+        self._usar_pdf_valido()
         self._post()
         response = self.client.post(
             self.url,
@@ -685,12 +772,79 @@ class FirmaFlujoTests(TestCase):
             [(reverse("documentos:user_completed"), 302)],
         )
         self.assertEqual(Firma.objects.count(), 1)
+        self.assertEqual(DocumentoResultado.objects.count(), 1)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO
+            ).count(),
+            1,
+        )
         self.assertContains(response, "Ya registraste tu firma")
 
     def test_dos_post_consecutivos_no_crean_dos_firmas(self):
         self._post()
         self._post()
         self.assertEqual(Firma.objects.filter(destinatario=self.solicitud).count(), 1)
+
+    def test_doble_firma_registra_un_solo_evento_de_firma_y_finalizacion(self):
+        self._usar_pdf_valido()
+        self._post()
+        self._post()
+
+        self.assertEqual(Firma.objects.filter(destinatario=self.solicitud).count(), 1)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO
+            ).count(),
+            1,
+        )
+
+    def test_firma_despues_de_finalizacion_no_duplica_nada(self):
+        self._usar_pdf_valido()
+        self._post()
+        resultado_pk = DocumentoResultado.objects.get(envio=self.envio).pk
+        with DocumentoResultado.objects.get(
+            envio=self.envio
+        ).archivo.open("rb") as archivo:
+            contenido_original = archivo.read()
+        self._post()
+
+        resultado = DocumentoResultado.objects.get(envio=self.envio)
+        self.assertEqual(resultado.pk, resultado_pk)
+        with resultado.archivo.open("rb") as archivo:
+            self.assertEqual(archivo.read(), contenido_original)
+        self.assertEqual(Firma.objects.count(), 1)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO
+            ).count(),
+            1,
+        )
+
+    def test_fallo_de_auditoria_revierte_firma_y_visualizacion(self):
+        with patch(
+            "firmas.view.registrar_evento", side_effect=RuntimeError("fallo")
+        ):
+            with self.assertRaises(RuntimeError):
+                self._post()
+
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
+        self.assertFalse(Firma.objects.exists())
+        self.assertFalse(EventoAuditoria.objects.exists())
 
     def test_relacion_uno_a_uno_impide_duplicados_en_base_de_datos(self):
         Firma.objects.create(
@@ -726,6 +880,41 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertFalse(Firma.objects.exists())
 
+    def test_destinatario_no_verificado_no_puede_ver_ni_firmar(self):
+        self.destinatario.email_verificado = False
+        self.destinatario.save(update_fields=("email_verificado",))
+        self.client.force_login(self.destinatario)
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                self.url,
+                {
+                    "metodo": Firma.Metodo.DIBUJADA,
+                    "firma": png_data_url(),
+                    "consentimiento": "1",
+                },
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[self.solicitud.pk])
+            ).status_code,
+            403,
+        )
+        self.assertFalse(Firma.objects.exists())
+        self.assertFalse(EventoAuditoria.objects.exists())
+
+        self.destinatario.email_verificado = True
+        self.destinatario.save(update_fields=("email_verificado",))
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA
+            ).exists()
+        )
+
     def test_estado_incompatible_no_crea_firma(self):
         DestinatarioDocumento.objects.filter(pk=self.solicitud.pk).update(estado="INVALIDO")
         response = self._post()
@@ -740,6 +929,36 @@ class FirmaFlujoTests(TestCase):
             response,
             f"{reverse('usuarios:login')}?next={self.url}",
         )
+        response = self.client.post(
+            self.url,
+            {
+                "metodo": Firma.Metodo.DIBUJADA,
+                "firma": png_data_url(),
+                "consentimiento": "1",
+            },
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('usuarios:login')}?next={self.url}",
+        )
+        self.assertFalse(Firma.objects.exists())
+
+    def test_firma_rechaza_post_autenticado_sin_csrf(self):
+        cliente = Client(enforce_csrf_checks=True)
+        cliente.force_login(self.destinatario)
+
+        response = cliente.post(
+            self.url,
+            {
+                "metodo": Firma.Metodo.DIBUJADA,
+                "firma": png_data_url(),
+                "consentimiento": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Firma.objects.exists())
+        self.assertFalse(EventoAuditoria.objects.exists())
 
     def test_firmar_no_cambia_propiedad_del_documento(self):
         self._post()

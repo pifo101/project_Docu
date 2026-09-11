@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Verifica tu correo | ADICLA Sign{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+    <section class="form-panel">
+        <div class="form-card">
+            <div class="form-card__heading">
+                <p class="overline">Cuenta pendiente</p>
+                <h2>Verifica tu correo</h2>
+                <p>Debes confirmar tu correo institucional antes de acceder a documentos y firmas.</p>
+            </div>
+            <form method="post" action="{% url 'usuarios:resend_verification' %}" class="auth-form">
+                {% csrf_token %}
+                <input type="hidden" name="email" value="{{ request.user.email }}">
+                <button class="primary-button" type="submit">Reenviar correo de verificación</button>
+            </form>
+            <form method="post" action="{% url 'usuarios:logout' %}" class="auth-form">
+                {% csrf_token %}
+                <button class="primary-button" type="submit">Cerrar sesión</button>
+            </form>
+        </div>
+    </section>
+</main>
+{% endblock %}
