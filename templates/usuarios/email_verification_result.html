@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Verificación de correo | ADICLA Sign{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+    <section class="form-panel">
+        <div class="form-card">
+            <div class="form-card__heading">
+                {% if verification_pending %}
+                    <p class="overline">Confirma la verificación</p>
+                    <h2>Verifica tu correo</h2>
+                    <p>Confirma para habilitar las funciones protegidas de ADICLA Sign.</p>
+                {% elif verification_success %}
+                    <p class="overline">Correo confirmado</p>
+                    <h2>Tu correo fue verificado</h2>
+                    <p>Ya puedes utilizar las funciones protegidas de ADICLA Sign.</p>
+                {% else %}
+                    <p class="overline">Enlace no válido</p>
+                    <h2>No se pudo verificar el correo</h2>
+                    <p>El enlace es inválido, ya fue utilizado o expiró.</p>
+                {% endif %}
+            </div>
+            {% if verification_pending %}
+                <form method="post" class="auth-form">
+                    {% csrf_token %}
+                    <button class="primary-button" type="submit">Confirmar correo</button>
+                </form>
+            {% else %}
+                <p class="form-card__switch">
+                    <a href="{% url 'usuarios:dashboard' %}">Continuar</a>
+                </p>
+            {% endif %}
+        </div>
+    </section>
+</main>
+{% endblock %}

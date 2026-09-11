@@ -2,6 +2,7 @@ import hashlib
 import json
 import shutil
 import tempfile
+import threading
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -9,16 +10,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.staticfiles import finders
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
+from auditoria.models import EventoAuditoria
 from usuarios.models import Cargo, Comite
 
 from firmas.models import Firma, FirmaPerfil
@@ -234,21 +236,24 @@ class DocumentoUploadTests(TestCase):
         return SimpleUploadedFile(nombre, contenido, content_type="application/pdf")
 
     def _subir(self, archivo, usuario=None):
-        self.client.force_login(usuario or self.usuario)
+        self.client.force_login(usuario or self.presidente)
         return self.client.post(reverse("documentos:upload"), {"archivo": archivo})
 
-    def test_usuario_puede_subir_pdf_y_se_guardan_metadatos(self):
+    def test_presidente_puede_subir_pdf_y_se_guardan_metadatos(self):
         contenido = b"%PDF-1.7\nok"
         response = self._subir(self._pdf(contenido=contenido))
         documento = Documento.objects.get()
 
         self.assertRedirects(response, reverse("documentos:list"))
-        self.assertEqual(documento.propietario, self.usuario)
+        self.assertEqual(documento.propietario, self.presidente)
         self.assertEqual(documento.nombre_original, "archivo.pdf")
         self.assertEqual(documento.tamano, len(contenido))
         self.assertEqual(documento.hash_sha256, hashlib.sha256(contenido).hexdigest())
         self.assertTrue(documento.archivo.name.startswith("documentos/"))
         self.assertEqual(documento.archivo.size, len(contenido))
+        evento = EventoAuditoria.objects.get(tipo=EventoAuditoria.Tipo.DOCUMENTO_CREADO)
+        self.assertEqual(evento.documento, documento)
+        self.assertEqual(evento.actor, self.presidente)
 
     def test_rechaza_archivo_no_pdf_vacio_y_mayor_al_limite(self):
         for archivo in (
@@ -266,7 +271,7 @@ class DocumentoUploadTests(TestCase):
         self.assertFalse(Documento.objects.exists())
 
     def test_post_sin_archivo_muestra_error_de_campo_obligatorio(self):
-        self.client.force_login(self.usuario)
+        self.client.force_login(self.presidente)
         response = self.client.post(
             reverse("documentos:upload"),
             {"csrfmiddlewaretoken": "token-de-prueba"},
@@ -275,6 +280,13 @@ class DocumentoUploadTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["form"].files)
         self.assertIn("archivo", response.context["form"].errors)
+
+    def test_miembro_no_puede_cargar_documentos_por_post_directo(self):
+        response = self._subir(self._pdf(), usuario=self.usuario)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Documento.objects.exists())
+        self.assertFalse(EventoAuditoria.objects.exists())
 
     def test_anonimo_no_puede_subir(self):
         response = self.client.get(reverse("documentos:upload"))
@@ -290,7 +302,19 @@ class DocumentoUploadTests(TestCase):
         self.assertNotContains(listado, "ajeno.pdf")
         self.assertEqual(self.client.get(reverse("documentos:document_detail", args=[propio.pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse("documentos:document_detail", args=[ajeno.pk])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("documentos:view_document", args=[ajeno.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse("documentos:download", args=[ajeno.pk])).status_code, 403)
+
+    def test_media_no_se_sirve_sin_pasarela_de_autorizacion(self):
+        documento = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=self._pdf("privado.pdf"),
+            nombre_original="privado.pdf",
+        )
+
+        self.assertEqual(self.client.get(documento.archivo.url).status_code, 404)
+        self.client.force_login(self.otro_usuario)
+        self.assertEqual(self.client.get(documento.archivo.url).status_code, 404)
 
     def test_propietario_visualiza_original_pero_solo_presidente_descarga(self):
         documento_miembro = Documento.objects.create(
@@ -371,6 +395,9 @@ class EnvioDocumentoTests(TestCase):
         cls.usuario_externo = cls.crear_usuario(
             "externo", cls.otro_comite, cls.cargo_miembro
         )
+        cls.presidente_externo = cls.crear_usuario(
+            "presidente-externo", cls.otro_comite, cls.cargo_presidente
+        )
         cls.documento = Documento.objects.create(
             propietario=cls.presidente,
             archivo=SimpleUploadedFile(
@@ -440,6 +467,10 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(envio.documento, self.documento)
         self.assertEqual(envio.remitente, self.presidente)
         self.assertEqual(envio.estado, EnvioDocumento.Estado.ENVIADO)
+        evento = EventoAuditoria.objects.get(tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO)
+        self.assertEqual(evento.documento, self.documento)
+        self.assertEqual(evento.envio, envio)
+        self.assertEqual(evento.actor, self.presidente)
         self.assertQuerySetEqual(
             envio.destinatarios.values_list("usuario_id", flat=True),
             [self.presidente.pk, self.miembro.pk],
@@ -506,10 +537,19 @@ class EnvioDocumentoTests(TestCase):
         url = reverse("documentos:send", args=[self.documento.pk])
 
         self.client.post(url)
+        primera_fecha = EnvioDocumento.objects.get().fecha_envio
         self.client.post(url)
 
+        envio = EnvioDocumento.objects.get()
+        self.assertEqual(envio.fecha_envio, primera_fecha)
         self.assertEqual(EnvioDocumento.objects.count(), 1)
         self.assertEqual(DestinatarioDocumento.objects.count(), 2)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO
+            ).count(),
+            1,
+        )
 
     def test_usuario_no_presidente_no_puede_enviar(self):
         documento = Documento.objects.create(
@@ -524,6 +564,95 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EnvioDocumento.objects.exists())
 
+    def test_presidente_externo_no_puede_consultar_ni_modificar_proceso_ajeno(self):
+        self.preparar_envio_con_campo()
+        self.client.force_login(self.presidente_externo)
+
+        for nombre in (
+            "document_detail",
+            "view_document",
+            "download",
+            "committee_recipients",
+            "send_review",
+            "document_editor",
+            "signature_fields",
+        ):
+            response = self.client.get(
+                reverse(f"documentos:{nombre}", args=[self.documento.pk])
+            )
+            self.assertEqual(response.status_code, 404, nombre)
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            EnvioDocumento.objects.get(documento=self.documento).estado,
+            EnvioDocumento.Estado.PREPARACION,
+        )
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO
+            ).exists()
+        )
+
+    def test_ids_inexistentes_fallan_sin_revelar_recursos(self):
+        self.client.force_login(self.presidente)
+        inexistente = self.documento.pk + 100000
+
+        for nombre in (
+            "document_detail",
+            "view_document",
+            "download",
+            "committee_recipients",
+            "send_review",
+            "document_editor",
+            "signature_fields",
+        ):
+            self.assertEqual(
+                self.client.get(reverse(f"documentos:{nombre}", args=[inexistente])).status_code,
+                404,
+                nombre,
+            )
+        self.assertEqual(
+            self.client.post(reverse("documentos:send", args=[inexistente])).status_code,
+            404,
+        )
+
+    def test_vistas_privadas_de_lectura_rechazan_metodos_incompatibles(self):
+        self.preparar_envio_con_campo()
+
+        for nombre, argumentos in (
+            ("list", []),
+            ("document_detail", [self.documento.pk]),
+            ("send_review", [self.documento.pk]),
+            ("document_editor", [self.documento.pk]),
+            ("user_documents", []),
+        ):
+            self.assertEqual(
+                self.client.put(reverse(f"documentos:{nombre}", args=argumentos)).status_code,
+                405,
+                nombre,
+            )
+
+    def test_envio_rechaza_post_autenticado_sin_csrf(self):
+        self.preparar_envio_con_campo()
+        cliente = Client(enforce_csrf_checks=True)
+        cliente.force_login(self.presidente)
+
+        response = cliente.post(reverse("documentos:send", args=[self.documento.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            EnvioDocumento.objects.get(documento=self.documento).estado,
+            EnvioDocumento.Estado.PREPARACION,
+        )
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO
+            ).exists()
+        )
+
     def test_presidente_de_comite_inactivo_no_puede_iniciar_envio(self):
         self.comite.activo = False
         self.comite.save(update_fields=("activo",))
@@ -535,6 +664,32 @@ class EnvioDocumentoTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EnvioDocumento.objects.exists())
+
+    def test_presidente_no_verificado_no_puede_gestionar_documentos(self):
+        self.presidente.email_verificado = False
+        self.presidente.save(update_fields=("email_verificado",))
+        self.client.force_login(self.presidente)
+
+        self.assertEqual(
+            self.client.get(reverse("documentos:upload")).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("documentos:committee_recipients", args=[self.documento.pk])
+            ).status_code,
+            403,
+        )
+        self.assertFalse(EnvioDocumento.objects.exists())
+
+        self.presidente.email_verificado = True
+        self.presidente.save(update_fields=("email_verificado",))
+        self.assertRedirects(
+            self.client.post(
+                reverse("documentos:committee_recipients", args=[self.documento.pk])
+            ),
+            reverse("documentos:document_editor", args=[self.documento.pk]),
+        )
 
     def test_comite_inactivo_no_puede_confirmar_envio(self):
         envio, destinatario = self.preparar_envio_con_campo()
@@ -580,6 +735,253 @@ class EnvioDocumentoTests(TestCase):
         destinatario.refresh_from_db()
         self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
         self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
+
+    def test_envio_sin_destinatarios_no_se_confirma(self):
+        EnvioDocumento.objects.create(
+            documento=self.documento,
+            remitente=self.presidente,
+            estado=EnvioDocumento.Estado.PREPARACION,
+        )
+        self.client.force_login(self.presidente)
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk])
+        )
+
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO
+            ).exists()
+        )
+
+    def test_fallo_de_auditoria_revierte_envio(self):
+        self.preparar_envio_con_campo()
+
+        with patch(
+            "documentos.view.registrar_evento", side_effect=RuntimeError("fallo")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("documentos:send", args=[self.documento.pk])
+                )
+
+        envio = EnvioDocumento.objects.get(documento=self.documento)
+        self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
+        self.assertTrue(
+            envio.destinatarios.filter(
+                estado=DestinatarioDocumento.Estado.BORRADOR
+            ).exists()
+        )
+        self.assertFalse(
+            envio.destinatarios.exclude(
+                estado=DestinatarioDocumento.Estado.BORRADOR
+            ).exists()
+        )
+        self.assertFalse(EventoAuditoria.objects.exists())
+
+    def crear_flujo_recibido(self, contenido=b"%PDF-1.7\nflujo"):
+        documento = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=SimpleUploadedFile(
+                "flujo.pdf", contenido, content_type="application/pdf"
+            ),
+            nombre_original="flujo.pdf",
+        )
+        envio = EnvioDocumento.objects.create(
+            documento=documento,
+            remitente=self.presidente,
+        )
+        destinatario = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.miembro,
+        )
+        return documento, envio, destinatario
+
+    def test_archivo_inaccesible_no_registra_visualizacion(self):
+        documento, _, destinatario = self.crear_flujo_recibido()
+        documento.archivo.delete(save=False)
+        self.client.force_login(self.miembro)
+
+        response = self.client.get(
+            reverse("documentos:received_document", args=[destinatario.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(destinatario.fecha_visualizacion)
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+            ).exists()
+        )
+
+    def test_doble_apertura_registra_una_sola_visualizacion(self):
+        _, destinatario = self.crear_envio()
+        self.client.force_login(self.miembro)
+        url = reverse("documentos:received_document", args=[destinatario.pk])
+
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get(url).status_code, 200)
+
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.VISTO)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+            ).count(),
+            1,
+        )
+
+    def test_subir_crea_nuevo_registro_sin_modificar_existente(self):
+        inicial = Documento.objects.count()
+        self.client.force_login(self.presidente)
+        self.client.post(
+            reverse("documentos:upload"),
+            {"archivo": SimpleUploadedFile(
+                "primero.pdf", b"%PDF-1.7\nprimero", content_type="application/pdf"
+            )},
+        )
+        primero = Documento.objects.get(nombre_original="primero.pdf")
+        hash_primero = primero.hash_sha256
+        self.client.post(
+            reverse("documentos:upload"),
+            {"archivo": SimpleUploadedFile(
+                "segundo.pdf", b"%PDF-1.7\nsegundo", content_type="application/pdf"
+            )},
+        )
+
+        self.assertEqual(Documento.objects.count(), inicial + 2)
+        primero.refresh_from_db()
+        self.assertEqual(primero.propietario, self.presidente)
+        self.assertEqual(primero.hash_sha256, hash_primero)
+        with primero.archivo.open("rb") as archivo:
+            self.assertEqual(archivo.read(), b"%PDF-1.7\nprimero")
+
+    def test_guardado_recalcula_hash_y_refleja_archivo_actual(self):
+        documento = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=SimpleUploadedFile(
+                "hash.pdf", b"%PDF-1.7\nhash", content_type="application/pdf"
+            ),
+            nombre_original="hash.pdf",
+        )
+        with documento.archivo.open("rb") as archivo:
+            self.assertEqual(
+                documento.hash_sha256,
+                hashlib.sha256(archivo.read()).hexdigest(),
+            )
+
+        documento.archivo = SimpleUploadedFile(
+            "reemplazo.pdf", b"%PDF-1.7\nreemplazo", content_type="application/pdf"
+        )
+        documento.save()
+
+        with documento.archivo.open("rb") as archivo:
+            contenido = archivo.read()
+        self.assertEqual(
+            documento.hash_sha256, hashlib.sha256(contenido).hexdigest()
+        )
+        # El reemplazo solo es posible por ORM/administración: no existe
+        # un endpoint HTTP para sustituir el archivo de un documento.
+        self.assertEqual(documento.nombre_original, "hash.pdf")
+
+    def test_cambio_de_comite_tras_envio_conserva_asignacion_historica(self):
+        self.preparar_envio_con_campo()
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        destinatario = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento, usuario=self.miembro
+        )
+        self.miembro.comite = self.otro_comite
+        self.miembro.save(update_fields=("comite",))
+        self.client.force_login(self.miembro)
+
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[destinatario.pk])
+            ).status_code,
+            200,
+        )
+        self.assertContains(
+            self.client.get(reverse("documentos:user_pending")), "acta.pdf"
+        )
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.usuario_id, self.miembro.pk)
+
+    def test_usuario_desactivado_conserva_asignacion_y_reactivacion_restaura_acceso(self):
+        self.preparar_envio_con_campo()
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        destinatario_pk = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento, usuario=self.miembro
+        ).pk
+        self.miembro.is_active = False
+        self.miembro.save(update_fields=("is_active",))
+
+        self.assertIsNone(
+            authenticate(email=self.miembro.email, password="ClaveSegura!2026")
+        )
+        self.assertTrue(
+            DestinatarioDocumento.objects.filter(
+                pk=destinatario_pk, usuario=self.miembro
+            ).exists()
+        )
+
+        self.miembro.is_active = True
+        self.miembro.save(update_fields=("is_active",))
+        self.client.force_login(self.miembro)
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[destinatario_pk])
+            ).status_code,
+            200,
+        )
+
+    def test_cambio_de_correo_conserva_asignacion_hasta_reverificar(self):
+        self.preparar_envio_con_campo()
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        destinatario = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento, usuario=self.miembro
+        )
+        self.miembro.email = "nuevo-correo@adicla.org.gt"
+        self.miembro.save(update_fields=("email",))
+        self.client.force_login(self.miembro)
+
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[destinatario.pk])
+            ).status_code,
+            403,
+        )
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.usuario_id, self.miembro.pk)
+
+        self.miembro.email_verificado = True
+        self.miembro.save(update_fields=("email_verificado",))
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[destinatario.pk])
+            ).status_code,
+            200,
+        )
+
+    def test_comite_inactivo_tras_envio_no_revoca_destinatario(self):
+        self.preparar_envio_con_campo()
+        self.client.post(reverse("documentos:send", args=[self.documento.pk]))
+        destinatario = DestinatarioDocumento.objects.get(
+            envio__documento=self.documento, usuario=self.miembro
+        )
+        self.comite.activo = False
+        self.comite.save(update_fields=("activo",))
+        self.client.force_login(self.miembro)
+
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:received_document", args=[destinatario.pk])
+            ).status_code,
+            200,
+        )
 
     def test_get_editor_sin_preparacion_no_crea_envio(self):
         self.client.force_login(self.presidente)
@@ -778,6 +1180,11 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(contenido, b"%PDF-1.7\nacta")
         self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertIsNotNone(destinatario.fecha_visualizacion)
+        evento = EventoAuditoria.objects.get(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        )
+        self.assertEqual(evento.envio, destinatario.envio)
+        self.assertEqual(evento.actor, self.miembro)
 
     def test_usuario_no_destinatario_no_puede_abrir_documento(self):
         _, destinatario = self.crear_envio()
@@ -1725,6 +2132,13 @@ class DocumentoResultadoTests(TestCase):
         self.assertEqual(primero.pk, segundo.pk)
         self.assertEqual(DocumentoResultado.objects.count(), 1)
         self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO,
+                envio=envio,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
             len(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf"))),
             1,
         )
@@ -1909,6 +2323,66 @@ class DocumentoResultadoTests(TestCase):
         self.assertFalse(DocumentoResultado.objects.exists())
         self.assertEqual(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf")), [])
 
+    def test_resultado_para_otro_proceso_responde_404(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        generar_resultado_si_completo(envio.pk)
+        otro_envio, _ = self._crear_envio()
+        self.client.force_login(self.propietario)
+
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:view_result", args=[otro_envio.pk])
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:download_result", args=[otro_envio.pk])
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("documentos:view_result", args=[otro_envio.pk + 100000])
+            ).status_code,
+            404,
+        )
+        self.assertEqual(DocumentoResultado.objects.count(), 1)
+
+    def test_fallo_de_auditoria_revierte_resultado_sin_archivo_huerfano(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+
+        with patch(
+            "documentos.services.registrar_evento", side_effect=RuntimeError("fallo")
+        ):
+            with self.assertRaisesRegex(ResultadoPDFError, "guardar"):
+                generar_resultado_si_completo(envio.pk)
+
+        self.assertFalse(DocumentoResultado.objects.exists())
+        self.assertEqual(list(Path(self.media_root).glob("documentos_resultados/**/*.pdf")), [])
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO
+            ).exists()
+        )
+
+    def test_generacion_fallida_no_deja_evento_de_finalizacion(self):
+        envio, _ = self._crear_envio()
+        self._agregar_firmante(envio, self.usuario_a)
+        Documento.objects.filter(pk=envio.documento_id).update(hash_sha256="0" * 64)
+
+        with self.assertRaisesRegex(ResultadoPDFError, "hash registrado"):
+            generar_resultado_si_completo(envio.pk)
+
+        self.assertFalse(DocumentoResultado.objects.exists())
+        self.assertFalse(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO
+            ).exists()
+        )
+
     def test_presidente_descarga_resultado_y_destinatario_solo_lo_visualiza(self):
         envio, _ = self._crear_envio()
         destinatario = self._agregar_firmante(envio, self.usuario_a)
@@ -2017,3 +2491,103 @@ class DocumentoResultadoTests(TestCase):
         completo = self.client.get(url)
         self.assertContains(completo, "Descargar documento firmado")
         self.assertNotContains(completo, "Documento firmado aún no disponible")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ResultadoConcurrencyTests(TransactionTestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        self.comite = Comite.objects.create(nombre="Comite concurrencia")
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        self.propietario = get_user_model().objects.create_user(
+            email="concurrencia-presidente@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Presidente",
+            comite=self.comite,
+            cargo=presidente,
+        )
+        firmante = get_user_model().objects.create_user(
+            email="concurrencia-firmante@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Firmante",
+            comite=self.comite,
+            cargo=miembro,
+        )
+        output = BytesIO()
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        writer.write(output)
+        documento = Documento.objects.create(
+            propietario=self.propietario,
+            archivo=SimpleUploadedFile(
+                "concurrencia.pdf", output.getvalue(), content_type="application/pdf"
+            ),
+            nombre_original="concurrencia.pdf",
+        )
+        self.envio = EnvioDocumento.objects.create(
+            documento=documento,
+            remitente=self.propietario,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        destinatario = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=firmante,
+            estado=DestinatarioDocumento.Estado.FIRMADO,
+        )
+        CampoFirma.objects.create(
+            destinatario=destinatario,
+            pagina=1,
+            x=Decimal("0.10"),
+            y=Decimal("0.20"),
+            ancho=Decimal("0.30"),
+            alto=Decimal("0.10"),
+        )
+        imagen = BytesIO()
+        Image.new("RGBA", (120, 40), (18, 53, 110, 255)).save(imagen, "PNG")
+        Firma.objects.create(
+            destinatario=destinatario,
+            imagen=imagen.getvalue(),
+            formato="image/png",
+            metodo=Firma.Metodo.DIBUJADA,
+            consentimiento=True,
+        )
+
+    def test_generacion_concurrente_es_idempotente(self):
+        barrera = threading.Barrier(2)
+        resultados = []
+        errores = []
+
+        def worker():
+            try:
+                barrera.wait(timeout=30)
+                resultados.append(generar_resultado_si_completo(self.envio.pk))
+            except Exception as error:  # pragma: no cover - diagnóstico
+                errores.append(error)
+
+        hilos = [threading.Thread(target=worker) for _ in range(2)]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join(timeout=120)
+
+        self.assertTrue(all(not hilo.is_alive() for hilo in hilos))
+        self.assertEqual(errores, [])
+        self.assertEqual(len(resultados), 2)
+        self.assertEqual(resultados[0].pk, resultados[1].pk)
+        self.assertEqual(DocumentoResultado.objects.count(), 1)
+        self.assertEqual(
+            EventoAuditoria.objects.filter(
+                tipo=EventoAuditoria.Tipo.PROCESO_FINALIZADO,
+                envio=self.envio,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            len(list(Path(settings.MEDIA_ROOT).glob("documentos_resultados/**/*.pdf"))),
+            1,
+        )

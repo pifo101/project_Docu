@@ -1,9 +1,11 @@
 from django.conf import settings
-from django.contrib.auth import login, logout
+from django.contrib import messages
+from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.utils.cache import patch_cache_control
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from documentos.models import EnvioDocumento
 from documentos.services import (
@@ -14,10 +16,32 @@ from documentos.services import (
 )
 from firmas.models import FirmaPerfil
 
-from .forms import LoginUsuarioForm, RegistroUsuarioForm
+from .forms import (
+    LoginUsuarioForm,
+    ReenvioVerificacionForm,
+    RegistroPublicoUsuarioForm,
+)
 from .models import Cargo
+from .services import (
+    enviar_correo_verificacion,
+    token_verificacion_email_valido,
+    verificar_token_email,
+)
 
 
+def _verification_pending_response(request):
+    return render(
+        request,
+        "usuarios/email_verification_pending.html",
+        {
+            "resend_form": ReenvioVerificacionForm(
+                initial={"email": request.user.email}
+            )
+        },
+    )
+
+
+@require_http_methods(["GET", "POST"])
 def login_view(request):
     form = LoginUsuarioForm(request, data=request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -37,17 +61,93 @@ def login_view(request):
     return render(request, "usuarios/login.html", {"form": form})
 
 
+@require_http_methods(["GET", "POST"])
 def register_view(request):
-    form = RegistroUsuarioForm(request.POST or None)
+    form = RegistroPublicoUsuarioForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        usuario = form.save()
+        try:
+            enviar_correo_verificacion(usuario, request, limitar_reenvio=False)
+            messages.success(
+                request,
+                "Cuenta creada. Revisa tu correo para verificarla.",
+            )
+        except Exception:
+            messages.warning(
+                request,
+                "La cuenta fue creada, pero no se pudo enviar el correo. Puedes solicitar otro.",
+            )
         return redirect("usuarios:login")
 
     return render(request, "usuarios/register.html", {"form": form})
 
 
+@require_POST
+def resend_verification_view(request):
+    form = ReenvioVerificacionForm(request.POST)
+    if form.is_valid():
+        usuario = get_user_model().objects.filter(
+            email__iexact=form.cleaned_data["email"],
+            email_verificado=False,
+            is_active=True,
+        ).first()
+        if usuario is not None:
+            try:
+                enviar_correo_verificacion(usuario, request)
+            except Exception:
+                pass
+    messages.info(
+        request,
+        "Si existe una cuenta pendiente para ese correo, recibirás un nuevo enlace cuando sea posible.",
+    )
+    return redirect("usuarios:login")
+
+
+@require_http_methods(["GET", "POST"])
+def verify_email_view(request, token):
+    if request.method == "GET":
+        if not token_verificacion_email_valido(token):
+            response = render(
+                request,
+                "usuarios/email_verification_result.html",
+                {"verification_success": False},
+                status=400,
+            )
+        else:
+            response = render(
+                request,
+                "usuarios/email_verification_result.html",
+                {"verification_pending": True},
+            )
+    else:
+        usuario = verificar_token_email(token)
+        if usuario is None:
+            response = render(
+                request,
+                "usuarios/email_verification_result.html",
+                {"verification_success": False},
+                status=400,
+            )
+        else:
+            if request.user.is_authenticated and request.user.pk == usuario.pk:
+                request.user.email_verificado = True
+                request.user.fecha_verificacion_email = usuario.fecha_verificacion_email
+            response = render(
+                request,
+                "usuarios/email_verification_result.html",
+                {"verification_success": True},
+            )
+
+    response["Referrer-Policy"] = "no-referrer"
+    patch_cache_control(response, private=True, no_store=True)
+    return response
+
+
 @login_required
+@require_GET
 def dashboard_view(request):
+    if not request.user.email_verificado:
+        return _verification_pending_response(request)
     if (
         request.user.is_staff
         or request.user.is_superuser
@@ -78,7 +178,10 @@ def dashboard_view(request):
 
 
 @login_required
+@require_GET
 def profile_view(request):
+    if not request.user.email_verificado:
+        return _verification_pending_response(request)
     sender_portal = (
         request.user.is_staff
         or request.user.is_superuser

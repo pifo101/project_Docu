@@ -17,6 +17,9 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from auditoria.models import EventoAuditoria
+from auditoria.services import registrar_evento
+from usuarios.decorators import email_verificado_required
 from usuarios.models import Cargo
 
 from .forms import DocumentoForm
@@ -28,12 +31,16 @@ from .services import (
 )
 
 
+def _es_presidente_activo(usuario):
+    return (
+        usuario.cargo_id == Cargo.Codigo.PRESIDENTE
+        and usuario.comite_id
+        and usuario.comite.activo
+    )
+
+
 def _documento_de_presidente(request, pk):
-    if (
-        request.user.cargo_id != Cargo.Codigo.PRESIDENTE
-        or not request.user.comite_id
-        or not request.user.comite.activo
-    ):
+    if not _es_presidente_activo(request.user):
         raise PermissionDenied
     return get_object_or_404(Documento, pk=pk, propietario=request.user)
 
@@ -107,6 +114,8 @@ def _campo_serializado(campo):
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def documents_view(request):
     context = sender_documents_context(request.user)
     context.update({
@@ -118,6 +127,7 @@ def documents_view(request):
 
 
 @login_required
+@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def committee_recipients_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -133,6 +143,8 @@ def committee_recipients_view(request, pk):
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def send_review_view(request, pk):
     documento = _documento_de_presidente(request, pk)
     envio = EnvioDocumento.objects.filter(documento=documento).first()
@@ -166,6 +178,7 @@ def send_review_view(request, pk):
 
 
 @login_required
+@email_verificado_required
 @require_POST
 def send_document_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -233,6 +246,13 @@ def send_document_view(request, pk):
         envio.fecha_envio = timezone.now()
         envio.save(update_fields=("estado", "fecha_envio"))
         envio.destinatarios.update(estado=DestinatarioDocumento.Estado.PENDIENTE)
+        registrar_evento(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_ENVIADO,
+            documento=documento,
+            envio=envio,
+            request=request,
+            informacion_adicional={"cantidad_destinatarios": len(destinatarios)},
+        )
 
     messages.success(
         request,
@@ -242,13 +262,24 @@ def send_document_view(request, pk):
 
 
 @login_required
+@email_verificado_required
+@require_http_methods(["GET", "POST"])
 def upload_document_view(request):
+    if not _es_presidente_activo(request.user):
+        raise PermissionDenied
     form = DocumentoForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        documento = form.save(commit=False)
-        documento.propietario = request.user
-        documento.nombre_original = form.cleaned_data["archivo"].name
-        documento.save()
+        with transaction.atomic():
+            documento = form.save(commit=False)
+            documento.propietario = request.user
+            documento.nombre_original = form.cleaned_data["archivo"].name
+            documento.save()
+            registrar_evento(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_CREADO,
+                documento=documento,
+                request=request,
+                informacion_adicional={"tamano": documento.tamano},
+            )
         messages.success(request, "El documento se cargó correctamente.")
         return redirect("documentos:list")
     context = sender_documents_context(request.user)
@@ -262,6 +293,8 @@ def upload_document_view(request):
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def owned_document_detail_view(request, pk):
     tracking_recipients = DestinatarioDocumento.objects.select_related(
         "usuario",
@@ -281,6 +314,7 @@ def owned_document_detail_view(request, pk):
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def view_document_view(request, pk):
     documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
@@ -288,6 +322,7 @@ def view_document_view(request, pk):
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def download_document_view(request, pk):
     if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
@@ -319,6 +354,7 @@ def _respuesta_archivo_pdf(campo_archivo, nombre, como_adjunto=False):
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def received_document_view(request, pk):
     with transaction.atomic():
@@ -335,15 +371,31 @@ def received_document_view(request, pk):
                 DestinatarioDocumento.Estado.FIRMADO,
             ),
         )
+        documento = destinatario.envio.documento
+        # Verificar que el archivo exista antes de registrar la visualización:
+        # un archivo inaccesible no debe dejar un estado VISTO ni un evento.
+        if not documento.archivo:
+            raise Http404
+        try:
+            with documento.archivo.open("rb"):
+                pass
+        except OSError as error:
+            raise Http404 from error
         if destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
             destinatario.estado = DestinatarioDocumento.Estado.VISTO
             destinatario.fecha_visualizacion = timezone.now()
             destinatario.save(update_fields=("estado", "fecha_visualizacion"))
-    documento = destinatario.envio.documento
+            registrar_evento(
+                tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+                envio=destinatario.envio,
+                request=request,
+                informacion_adicional={"destinatario_id": destinatario.pk},
+            )
     return _respuesta_archivo_pdf(documento.archivo, documento.nombre_original)
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def view_result_view(request, pk):
     permiso = (
@@ -370,6 +422,7 @@ def view_result_view(request, pk):
 
 
 @login_required
+@email_verificado_required
 @require_GET
 def download_result_view(request, pk):
     if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
@@ -403,6 +456,8 @@ def editor_view(request):
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def document_editor_view(request, pk):
     documento = _documento_de_presidente(request, pk)
     envio = EnvioDocumento.objects.filter(documento=documento).first()
@@ -436,6 +491,7 @@ def document_editor_view(request, pk):
 
 
 @login_required
+@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def signature_fields_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -547,11 +603,15 @@ def review_view(request):
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def pending_view(request):
     return redirect("documentos:user_pending")
 
 
 @login_required
+@email_verificado_required
+@require_GET
 def user_documents_view(request, status=None):
     selected_status = status or request.GET.get("estado", "todos")
     context = recipient_documents_context(request.user, selected_status)
