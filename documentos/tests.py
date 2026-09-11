@@ -64,6 +64,15 @@ class DocumentsPageTests(TestCase):
             comite=comite,
             cargo=Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO),
         )
+        cls.administrador = get_user_model().objects.create_user(
+            email="administrador-listado@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Administrador",
+            last_name="Listado",
+            comite=comite,
+            cargo=Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO),
+            is_staff=True,
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -122,6 +131,31 @@ class DocumentsPageTests(TestCase):
             self.assertContains(response, f'action="{logout_url}"')
             self.assertContains(response, 'method="post"')
             self.assertContains(response, 'name="csrfmiddlewaretoken"')
+            self.assertContains(response, 'class="app-sidebar__logout"')
+
+    def test_president_documents_menu_reuses_sent_and_received_routes(self):
+        self.client.force_login(self.presidente)
+
+        for route_name, active_section in (
+            ("usuarios:dashboard", None),
+            ("documentos:list", "Documentos enviados"),
+            ("documentos:user_documents", "Documentos recibidos"),
+        ):
+            response = self.client.get(reverse(route_name))
+            self.assertContains(response, 'class="nav-group"')
+            self.assertContains(response, f'href="{reverse("documentos:list")}"')
+            self.assertContains(response, f'href="{reverse("documentos:user_documents")}"')
+            if active_section:
+                self.assertContains(response, f'aria-current="page">{active_section}</a>')
+
+    def test_administrator_keeps_simple_navigation_and_local_logout_style(self):
+        self.client.force_login(self.administrador)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertContains(response, 'class="app-sidebar__logout"')
+        self.assertContains(response, f'href="{reverse("documentos:list")}"')
+        self.assertNotContains(response, 'class="nav-group"')
 
     def test_sender_dashboard_counts_come_from_real_records(self):
         pendiente = Documento.objects.create(
