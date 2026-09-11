@@ -41,21 +41,50 @@ from .services import (
 )
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class DocumentsPageTests(TestCase):
-    def test_documents_page_renders_mock_list_and_controls(self):
+    @classmethod
+    def setUpTestData(cls):
+        comite = Comite.objects.create(nombre="Comité listado privado")
+        cls.presidente = get_user_model().objects.create_user(
+            email="listado-privado@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Lista",
+            last_name="Privada",
+            comite=comite,
+            cargo=Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE),
+        )
+        cls.miembro = get_user_model().objects.create_user(
+            email="miembro-listado@adicla.org.gt",
+            password="ClaveSegura!2026",
+            first_name="Miembro",
+            last_name="Listado",
+            comite=comite,
+            cargo=Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO),
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    def test_documents_page_requires_authentication(self):
         response = self.client.get(reverse("documentos:list"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Mis documentos")
-        self.assertContains(response, "Contrato de servicios 2026")
-        self.assertContains(response, 'data-document-search')
-        self.assertContains(response, 'data-filter="expired"')
-        self.assertContains(response, 'data-empty-state')
-        self.assertContains(response, 'data-upload-open', count=3)
+        self.assertRedirects(
+            response,
+            f'{reverse("usuarios:login")}?next={reverse("documentos:list")}',
+        )
 
     def test_upload_form_and_drop_zone_submit_the_archivo_field(self):
+        self.client.force_login(self.presidente)
         response = self.client.get(reverse("documentos:list"))
 
+        self.assertContains(response, "Mis documentos")
+        self.assertContains(response, 'data-document-search')
+        self.assertContains(response, 'data-filter="all"')
+        self.assertContains(response, 'data-empty-state')
+        self.assertNotContains(response, "Contrato de servicios 2026")
         self.assertContains(response, 'method="post"')
         self.assertContains(response, 'enctype="multipart/form-data"')
         self.assertContains(response, 'name="archivo"')
@@ -81,6 +110,48 @@ class DocumentsPageTests(TestCase):
         self.assertContains(response, f'href="{reverse("documentos:list")}"')
         self.assertNotContains(response, f'data-editor-url="{reverse("documentos:recipients")}"')
         self.assertNotContains(response, "Andrea Morales")
+
+    def test_sender_private_navigation_exposes_post_logout(self):
+        self.client.force_login(self.presidente)
+        logout_url = reverse("usuarios:logout")
+
+        for route_name in ("usuarios:dashboard", "usuarios:profile", "documentos:list"):
+            response = self.client.get(reverse(route_name))
+            self.assertContains(response, f'action="{logout_url}"')
+            self.assertContains(response, 'method="post"')
+            self.assertContains(response, 'name="csrfmiddlewaretoken"')
+
+    def test_sender_dashboard_counts_come_from_real_records(self):
+        pendiente = Documento.objects.create(
+            propietario=self.presidente,
+            archivo=SimpleUploadedFile("pendiente-contador.pdf", b"%PDF-1.7\ncontador"),
+            nombre_original="pendiente-contador.pdf",
+        )
+        Documento.objects.create(
+            propietario=self.presidente,
+            archivo=SimpleUploadedFile("sin-envio-contador.pdf", b"%PDF-1.7\ncontador"),
+            nombre_original="sin-envio-contador.pdf",
+        )
+        envio = EnvioDocumento.objects.create(
+            documento=pendiente,
+            remitente=self.presidente,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.miembro,
+            estado=DestinatarioDocumento.Estado.PENDIENTE,
+        )
+        self.client.force_login(self.presidente)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertEqual(response.context["owned_document_count"], 2)
+        self.assertEqual(response.context["sent_document_count"], 1)
+        self.assertEqual(response.context["waiting_signature_count"], 1)
+        self.assertContains(response, "Documentos totales")
+        self.assertContains(response, "Firmas pendientes")
+        self.assertContains(response, "Envíos realizados")
 
     def test_navegacion_autenticada_no_enlaza_rutas_demo(self):
         comite = Comite.objects.create(nombre="Comité navegación real")
@@ -391,6 +462,8 @@ class EnvioDocumentoTests(TestCase):
             self.assertContains(response, str(self.miembro))
             self.assertNotContains(response, str(self.inactivo))
             self.assertNotContains(response, str(self.usuario_externo))
+            self.assertContains(response, f'action="{reverse("usuarios:logout")}"')
+            self.assertContains(response, 'method="post"')
 
     def test_listado_usa_estado_y_rutas_del_envio_real(self):
         self.preparar_envio_con_campo()
@@ -1072,7 +1145,8 @@ class RecipientExperienceTests(TestCase):
         response = self.client.get(reverse("firmas:request"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "te ha solicitado revisar y firmar")
+        self.assertContains(response, "Solicitud de firma de demostración")
+        self.assertContains(response, "no contiene una solicitud ni datos reales")
         self.assertNotContains(response, "Navegación principal")
 
     def test_sign_page_has_fields_canvas_and_consent(self):
@@ -1091,7 +1165,7 @@ class RecipientExperienceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Documento completado")
-        self.assertContains(response, "Tu firma se registró correctamente")
+        self.assertContains(response, "no representa una firma real")
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -1216,6 +1290,22 @@ class UserDocumentPortalTests(TestCase):
         self.assertContains(response, "Documento firmado.pdf")
         self.assertNotContains(response, "Pendiente real.pdf")
         self.assertNotContains(response, "Documento visto.pdf")
+
+    def test_recipient_private_navigation_exposes_post_logout(self):
+        logout_url = reverse("usuarios:logout")
+        urls = (
+            reverse("usuarios:dashboard"),
+            reverse("usuarios:profile"),
+            reverse("documentos:user_documents"),
+            reverse("documentos:user_pending"),
+            reverse("documentos:user_completed"),
+        )
+
+        for url in urls:
+            response = self.client.get(url)
+            self.assertContains(response, f'action="{logout_url}"')
+            self.assertContains(response, 'method="post"')
+            self.assertContains(response, 'name="csrfmiddlewaretoken"')
 
     def test_invalid_filter_falls_back_to_all(self):
         response = self.client.get(

@@ -8,15 +8,15 @@
     // Datos temporales centralizados para construir la UI mientras no existe una API de directorio.
     const MOCK_DIRECTORY = {
         people: [
-            { id: "person-1", firstName: "Juan", lastName: "Martínez", email: "juan.martinez@adicla.org.gt", committeeId: "committee-demo-a", role: "Secretario" },
-            { id: "person-2", firstName: "María", lastName: "López", email: "maria.lopez@adicla.org.gt", committeeId: "committee-demo-a", role: "Vocal" },
-            { id: "person-3", firstName: "Sofía", lastName: "Herrera", email: "sofia.herrera@adicla.org.gt", committeeId: "committee-demo-a", role: "Tesorera" },
-            { id: "person-4", firstName: "Carlos", lastName: "Pérez", email: "carlos.perez@adicla.org.gt", committeeId: "committee-demo-b", role: "Presidente" },
-            { id: "person-5", firstName: "Ana", lastName: "Gómez", email: "ana.gomez@adicla.org.gt", committeeId: "committee-demo-b", role: "Vocal" },
-            { id: "person-6", firstName: "Luis", lastName: "Ramírez", email: "luis.ramirez@adicla.org.gt", committeeId: "committee-demo-b", role: "Secretario" },
-            { id: "person-7", firstName: "Elena", lastName: "Castillo", email: "elena.castillo@adicla.org.gt", committeeId: "committee-demo-c", role: "Presidenta" },
-            { id: "person-8", firstName: "Diego", lastName: "Ortiz", email: "diego.ortiz@adicla.org.gt", committeeId: "committee-demo-c", role: "Vocal" },
-            { id: "person-9", firstName: "Lucía", lastName: "Méndez", email: "lucia.mendez@adicla.org.gt", committeeId: "committee-demo-c", role: "Tesorera" },
+            { id: "person-1", firstName: "Persona", lastName: "Uno", email: "persona1@example.invalid", committeeId: "committee-demo-a", role: "Rol de demostración" },
+            { id: "person-2", firstName: "Persona", lastName: "Dos", email: "persona2@example.invalid", committeeId: "committee-demo-a", role: "Rol de demostración" },
+            { id: "person-3", firstName: "Persona", lastName: "Tres", email: "persona3@example.invalid", committeeId: "committee-demo-a", role: "Rol de demostración" },
+            { id: "person-4", firstName: "Persona", lastName: "Cuatro", email: "persona4@example.invalid", committeeId: "committee-demo-b", role: "Rol de demostración" },
+            { id: "person-5", firstName: "Persona", lastName: "Cinco", email: "persona5@example.invalid", committeeId: "committee-demo-b", role: "Rol de demostración" },
+            { id: "person-6", firstName: "Persona", lastName: "Seis", email: "persona6@example.invalid", committeeId: "committee-demo-b", role: "Rol de demostración" },
+            { id: "person-7", firstName: "Persona", lastName: "Siete", email: "persona7@example.invalid", committeeId: "committee-demo-c", role: "Rol de demostración" },
+            { id: "person-8", firstName: "Persona", lastName: "Ocho", email: "persona8@example.invalid", committeeId: "committee-demo-c", role: "Rol de demostración" },
+            { id: "person-9", firstName: "Persona", lastName: "Nueve", email: "persona9@example.invalid", committeeId: "committee-demo-c", role: "Rol de demostración" },
         ],
         committees: [
             { id: "committee-demo-a", name: "Comité de demostración A", memberIds: ["person-1", "person-2", "person-3"] },

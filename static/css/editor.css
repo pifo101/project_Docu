@@ -105,6 +105,14 @@
     cursor: pointer;
 }
 
+.editor-header__actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
 .editor-continue:hover:not(:disabled) {
     background: var(--color-primary-hover);
 }
@@ -895,6 +903,17 @@
     .editor-document {
         display: block;
         max-width: 44vw;
+    }
+
+    .editor-header__actions .session-logout button {
+        width: 44px;
+        padding: 0;
+        font-size: 0;
+    }
+
+    .editor-header__actions .session-logout button::after {
+        content: "Salir";
+        font-size: 10px;
     }
 
     .editor-document strong {

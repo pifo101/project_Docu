@@ -347,6 +347,42 @@
     opacity: 1;
 }
 
+.profile-data-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    padding: 24px;
+    gap: 19px;
+}
+
+.profile-data-grid > div {
+    display: grid;
+    min-width: 0;
+    gap: 7px;
+}
+
+.profile-data-grid__wide {
+    grid-column: 1 / -1;
+}
+
+.profile-data-grid dt {
+    color: #344054;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.profile-data-grid dd {
+    min-height: 43px;
+    margin: 0;
+    padding: 12px 13px;
+    overflow-wrap: anywhere;
+    border: 1px solid #eaecf0;
+    border-radius: 9px;
+    color: #475467;
+    background: #f9fafb;
+    font-size: 12px;
+}
+
 .profile-input-with-icon {
     position: relative;
 }
@@ -689,6 +725,15 @@
     .profile-fields {
         grid-template-columns: 1fr;
         padding: 20px;
+    }
+
+    .profile-data-grid {
+        grid-template-columns: 1fr;
+        padding: 20px;
+    }
+
+    .profile-data-grid__wide {
+        grid-column: auto;
     }
 
     .profile-field--wide {

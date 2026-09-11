@@ -7,8 +7,6 @@
     const emptyState = document.querySelector("[data-empty-state]");
     const emptyTitle = emptyState?.querySelector("[data-empty-title]");
     const emptyCopy = emptyState?.querySelector("[data-empty-copy]");
-    const documentsPanel = document.querySelector(".documents-panel");
-    const documentsFeedback = document.querySelector("[data-documents-feedback]");
     let activeFilter = "all";
 
     const normalize = (value) => value
@@ -16,14 +14,6 @@
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .trim();
-
-    function closeActionMenus(exceptToggle = null) {
-        document.querySelectorAll("[data-actions-toggle]").forEach((toggle) => {
-            if (toggle === exceptToggle) return;
-            toggle.setAttribute("aria-expanded", "false");
-            toggle.nextElementSibling.hidden = true;
-        });
-    }
 
     function updateDocuments() {
         const query = normalize(searchInput?.value || "");
@@ -48,7 +38,6 @@
                 : "Cuando tengas documentos en este estado, aparecerán en esta sección.";
         }
 
-        closeActionMenus();
     }
 
     filters.forEach((filter) => {
@@ -57,7 +46,7 @@
             filters.forEach((item) => {
                 const isActive = item === filter;
                 item.classList.toggle("document-filter--active", isActive);
-                item.setAttribute("aria-selected", String(isActive));
+                item.setAttribute("aria-pressed", String(isActive));
             });
             updateDocuments();
         });
@@ -79,46 +68,6 @@
             event.preventDefault();
             searchInput?.focus();
         }
-        if (event.key === "Escape") {
-            const openToggle = document.querySelector('[data-actions-toggle][aria-expanded="true"]');
-            closeActionMenus();
-            openToggle?.focus();
-        }
     });
 
-    document.querySelectorAll("[data-actions-toggle]").forEach((toggle) => {
-        toggle.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const willOpen = toggle.getAttribute("aria-expanded") !== "true";
-            closeActionMenus(toggle);
-            toggle.setAttribute("aria-expanded", String(willOpen));
-            toggle.nextElementSibling.hidden = !willOpen;
-            if (willOpen) toggle.nextElementSibling.querySelector("[role='menuitem']")?.focus();
-        });
-    });
-
-    document.addEventListener("click", () => closeActionMenus());
-    document.querySelectorAll(".document-actions__menu").forEach((menu) => {
-        menu.addEventListener("click", (event) => event.stopPropagation());
-        menu.addEventListener("keydown", (event) => {
-            if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-            event.preventDefault();
-            const items = Array.from(menu.querySelectorAll("[role='menuitem']"));
-            const direction = event.key === "ArrowDown" ? 1 : -1;
-            const nextIndex = (items.indexOf(document.activeElement) + direction + items.length) % items.length;
-            items[nextIndex].focus();
-        });
-        menu.querySelectorAll("[role='menuitem']").forEach((action) => {
-            action.addEventListener("click", () => {
-                const label = action.textContent.trim();
-                if (label === "Ver detalle") return window.location.assign(documentsPanel.dataset.detailUrl);
-                if (label === "Continuar edición") return window.location.assign(documentsPanel.dataset.editUrl);
-                if (documentsFeedback) {
-                    documentsFeedback.textContent = `${label}: acción de demostración.`;
-                    documentsFeedback.hidden = false;
-                }
-                closeActionMenus();
-            });
-        });
-    });
 })();
