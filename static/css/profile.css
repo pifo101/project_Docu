@@ -193,10 +193,21 @@
 }
 
 .profile-nav__link:hover,
+.profile-nav__link:focus-visible,
 .profile-nav__link--active {
     color: var(--color-primary);
     background: var(--color-primary-soft);
     text-decoration: none;
+}
+
+.profile-status--inactive {
+    color: #b42318;
+    background: #fff1ef;
+}
+
+.profile-nav__link:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 .profile-nav__link svg,
@@ -399,6 +410,11 @@
     border-radius: 50%;
     background: #12b76a;
     box-shadow: 0 0 0 3px #d1fadf;
+}
+
+.profile-account-state--inactive i {
+    background: #f04438;
+    box-shadow: 0 0 0 3px #fee4e2;
 }
 
 .profile-input-with-icon {

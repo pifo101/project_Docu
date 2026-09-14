@@ -4,6 +4,7 @@ from django.contrib.auth.forms import UserChangeForm
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 
+from .constants import OFFICIAL_COMMITTEE_NAMES
 from .models import (
     Cargo,
     Comite,
@@ -94,7 +95,13 @@ class RegistroUsuarioForm(forms.ModelForm):
 class RegistroPublicoUsuarioForm(RegistroUsuarioForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["cargo"].queryset = Cargo.objects.filter(es_directivo=False)
+        self.fields["comite"].queryset = Comite.objects.filter(
+            activo=True,
+            nombre__in=OFFICIAL_COMMITTEE_NAMES,
+        )
+        self.fields["cargo"].queryset = Cargo.objects.filter(
+            codigo__in=Cargo.Codigo.values,
+        )
 
     def save(self, commit=True):
         user = super().save(commit=False)

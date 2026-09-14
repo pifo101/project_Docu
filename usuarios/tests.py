@@ -46,6 +46,10 @@ class AuthPagesTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inicia sesión")
+        self.assertNotContains(
+            response,
+            f'action="{reverse("usuarios:resend_verification")}"',
+        )
 
     def test_register_page_renders(self):
         response = self.client.get(reverse("usuarios:register"))
@@ -186,7 +190,7 @@ class RegistroUsuarioTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.comite = Comite.objects.create(nombre="Comité de Registro")
+        cls.comite = Comite.objects.get(nombre=OFFICIAL_COMMITTEE_NAMES[0])
         cls.cargo = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
 
     def datos_validos(self, **changes):
@@ -225,18 +229,37 @@ class RegistroUsuarioTests(TestCase):
         self.assertContains(response, self.comite.nombre)
         self.assertContains(response, self.cargo.nombre)
 
-    def test_registro_publico_no_expone_cargos_directivos(self):
+    def test_registro_publico_muestra_todos_los_cargos_oficiales(self):
         response = self.client.get(reverse("usuarios:register"))
 
-        for cargo in Cargo.objects.filter(es_directivo=True):
-            self.assertNotContains(response, f'value="{cargo.codigo}"')
+        for codigo, nombre in Cargo.Codigo.choices:
+            self.assertContains(response, f'value="{codigo}"')
+            self.assertContains(response, nombre)
+        self.assertContains(response, f'value="{Cargo.Codigo.MIEMBRO}"')
 
-    def test_registro_publico_rechaza_cargo_directivo_manipulado(self):
-        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+    def test_registro_publico_acepta_cargo_valido(self):
+        secretario = Cargo.objects.get(codigo=Cargo.Codigo.SECRETARIO)
 
         response = self.client.post(
             reverse("usuarios:register"),
-            self.datos_validos(cargo=presidente.codigo),
+            self.datos_validos(
+                cargo=secretario.codigo,
+                email="secretario-registro@adicla.org.gt",
+            ),
+        )
+
+        self.assertRedirects(response, reverse("usuarios:login"))
+        self.assertEqual(
+            get_user_model().objects.get(
+                email="secretario-registro@adicla.org.gt"
+            ).cargo,
+            secretario,
+        )
+
+    def test_registro_publico_rechaza_cargo_no_permitido(self):
+        response = self.client.post(
+            reverse("usuarios:register"),
+            self.datos_validos(cargo="ADMINISTRADOR"),
         )
 
         self.assertFormError(
@@ -253,19 +276,20 @@ class RegistroUsuarioTests(TestCase):
         for nombre in OFFICIAL_COMMITTEE_NAMES:
             self.assertContains(response, nombre)
 
-    def test_selector_excluye_comites_inactivos(self):
-        inactivo = Comite.objects.create(nombre="Comité inactivo", activo=False)
+    def test_selector_excluye_comites_antiguos_aunque_estan_activos(self):
+        antiguo = Comite.objects.create(nombre="Recursos Humanos", activo=True)
 
         response = self.client.get(reverse("usuarios:register"))
 
-        self.assertNotContains(response, inactivo.nombre)
+        self.assertNotContains(response, antiguo.nombre)
 
     def test_registro_rechaza_comite_inactivo(self):
-        inactivo = Comite.objects.create(nombre="Comité deshabilitado", activo=False)
+        self.comite.activo = False
+        self.comite.save(update_fields=("activo",))
 
         response = self.client.post(
             reverse("usuarios:register"),
-            self.datos_validos(comite=inactivo.pk),
+            self.datos_validos(comite=self.comite.pk),
         )
 
         self.assertFormError(
@@ -409,7 +433,7 @@ class VerificacionEmailTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.comite = Comite.objects.create(nombre="Comité verificación")
+        cls.comite = Comite.objects.get(nombre=OFFICIAL_COMMITTEE_NAMES[0])
         cls.miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
 
     def datos_registro(self, **changes):
@@ -463,6 +487,7 @@ class VerificacionEmailTests(TestCase):
         usuario.refresh_from_db()
 
         self.assertEqual(confirmacion.status_code, 200)
+        self.assertContains(confirmacion, "verification-card--pending")
         self.assertFalse(usuario.email_verificado)
         self.assertIn("no-store", confirmacion["Cache-Control"])
         self.assertEqual(confirmacion["Referrer-Policy"], "no-referrer")
@@ -471,6 +496,7 @@ class VerificacionEmailTests(TestCase):
         usuario.refresh_from_db()
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "verification-card--success")
         self.assertTrue(usuario.email_verificado)
         self.assertIsNotNone(usuario.fecha_verificacion_email)
         self.assertTrue(response.wsgi_request.user.email_verificado)
@@ -486,7 +512,13 @@ class VerificacionEmailTests(TestCase):
         usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
 
         ruta_alterada = f"{ruta.rstrip('/')}alterado/"
-        self.assertEqual(self.client.get(ruta_alterada).status_code, 400)
+        respuesta_alterada = self.client.get(ruta_alterada)
+        self.assertEqual(respuesta_alterada.status_code, 400)
+        self.assertContains(
+            respuesta_alterada,
+            "verification-card--error",
+            status_code=400,
+        )
         with self.settings(EMAIL_VERIFICATION_TIMEOUT=-1):
             self.assertEqual(self.client.get(ruta).status_code, 400)
         usuario.refresh_from_db()
@@ -575,9 +607,12 @@ class VerificacionEmailTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("usuarios:dashboard"))
+        pending_response = self.client.get(reverse("usuarios:dashboard"))
+        self.assertContains(pending_response, "Tu cuenta necesita verificación")
+        self.assertContains(pending_response, "pendiente@adicla.org.gt")
         self.assertContains(
-            self.client.get(reverse("usuarios:dashboard")),
-            "Verifica tu correo",
+            pending_response,
+            f'action="{reverse("usuarios:resend_verification")}"',
         )
         self.assertContains(
             self.client.get(reverse("usuarios:profile")),

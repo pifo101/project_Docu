@@ -86,19 +86,10 @@
             </form>
 
             {% if messages %}
-                {% for message in messages %}<p class="form-card__switch">{{ message }}</p>{% endfor %}
-            {% endif %}
-
-            <form method="post" action="{% url 'usuarios:resend_verification' %}" class="auth-form">
-                {% csrf_token %}
-                <div class="field">
-                    <label for="verification-email">¿No recibiste el correo de verificación?</label>
-                    <div class="field__control">
-                        <input id="verification-email" name="email" type="email" placeholder="usuario@adicla.org.gt" autocomplete="email" required>
-                    </div>
+                <div class="auth-messages" aria-live="polite">
+                    {% for message in messages %}<p class="auth-message auth-message--{{ message.tags|default:'info' }}">{{ message }}</p>{% endfor %}
                 </div>
-                <button class="primary-button" type="submit">Reenviar verificación</button>
-            </form>
+            {% endif %}
 
             <p class="form-card__switch">¿Aún no tienes una cuenta? <a href="{% url 'usuarios:register' %}">Crear cuenta</a></p>
             <p class="legal-copy">Al continuar aceptas nuestros <a href="#">Términos de uso</a> y <a href="#">Política de privacidad</a>.</p>

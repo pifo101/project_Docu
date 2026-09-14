@@ -21,7 +21,7 @@
         <main class="dashboard-content profile-content">
             <section class="profile-heading" aria-labelledby="profile-title">
                 <div><span class="section-eyebrow">Cuenta</span><h1 id="profile-title">Mi perfil</h1><p>Consulta tu información institucional y administra tu firma guardada.</p></div>
-                <span class="profile-status"><i></i>{% if request.user.is_active %}Cuenta activa{% else %}Cuenta inactiva{% endif %}</span>
+                <span class="profile-status{% if not request.user.is_active %} profile-status--inactive{% endif %}"><i></i>{% if request.user.is_active %}Cuenta activa{% else %}Cuenta inactiva{% endif %}</span>
             </section>
 
             <div class="profile-layout">
@@ -48,7 +48,7 @@
                             <div><dt>Apellido</dt><dd>{{ request.user.last_name|default:"No registrado" }}</dd></div>
                             <div class="profile-data-grid__wide"><dt>Correo electrónico</dt><dd>{{ request.user.email }}</dd></div>
                             <div><dt>Cargo</dt><dd>{{ request.user.cargo.nombre|default:"No registrado" }}</dd></div>
-                            <div><dt>Estado de la cuenta</dt><dd class="profile-account-state"><i aria-hidden="true"></i>{% if request.user.is_active %}Activo{% else %}Inactivo{% endif %}</dd></div>
+                            <div><dt>Estado de la cuenta</dt><dd class="profile-account-state{% if not request.user.is_active %} profile-account-state--inactive{% endif %}"><i aria-hidden="true"></i>{% if request.user.is_active %}Activo{% else %}Inactivo{% endif %}</dd></div>
                         </dl>
                     </section>
 
