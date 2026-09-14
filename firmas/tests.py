@@ -139,19 +139,14 @@ class FirmaPerfilTests(TestCase):
             response = getattr(self.client, method)(reverse(f"firmas:{route}"))
             self.assertEqual(response.status_code, 302)
 
-    def test_usuario_no_verificado_no_puede_gestionar_firma_de_perfil(self):
+    def test_indicador_historico_no_bloquea_firma_de_perfil(self):
         self.usuario.email_verificado = False
         self.usuario.save(update_fields=("email_verificado",))
-        self.client.force_login(self.usuario)
 
-        self.assertEqual(
-            self.client.post(
-                reverse("firmas:profile_save"),
-                {"imagen": SimpleUploadedFile("firma.png", png_bytes())},
-            ).status_code,
-            403,
-        )
-        self.assertFalse(FirmaPerfil.objects.filter(usuario=self.usuario).exists())
+        response = self._upload()
+
+        self.assertRedirects(response, reverse("usuarios:profile"))
+        self.assertTrue(FirmaPerfil.objects.filter(usuario=self.usuario).exists())
 
     def test_archivo_vacio_se_rechaza(self):
         self._upload(content=b"")
@@ -880,40 +875,23 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
         self.assertFalse(Firma.objects.exists())
 
-    def test_destinatario_no_verificado_no_puede_ver_ni_firmar(self):
+    def test_indicador_historico_no_bloquea_firma_de_destinatario(self):
         self.destinatario.email_verificado = False
         self.destinatario.save(update_fields=("email_verificado",))
         self.client.force_login(self.destinatario)
 
-        self.assertEqual(self.client.get(self.url).status_code, 403)
-        self.assertEqual(
-            self.client.post(
-                self.url,
-                {
-                    "metodo": Firma.Metodo.DIBUJADA,
-                    "firma": png_data_url(),
-                    "consentimiento": "1",
-                },
-            ).status_code,
-            403,
-        )
-        self.assertEqual(
-            self.client.get(
-                reverse("documentos:received_document", args=[self.solicitud.pk])
-            ).status_code,
-            403,
-        )
-        self.assertFalse(Firma.objects.exists())
-        self.assertFalse(EventoAuditoria.objects.exists())
-
-        self.destinatario.email_verificado = True
-        self.destinatario.save(update_fields=("email_verificado",))
         self.assertEqual(self.client.get(self.url).status_code, 200)
-        self.assertFalse(
-            EventoAuditoria.objects.filter(
-                tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA
-            ).exists()
+        response = self.client.post(
+            self.url,
+            {
+                "metodo": Firma.Metodo.DIBUJADA,
+                "firma": png_data_url(),
+                "consentimiento": "1",
+            },
         )
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertTrue(Firma.objects.filter(destinatario=self.solicitud).exists())
 
     def test_estado_incompatible_no_crea_firma(self):
         DestinatarioDocumento.objects.filter(pk=self.solicitud.pk).update(estado="INVALIDO")

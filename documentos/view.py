@@ -19,7 +19,6 @@ from pypdf.errors import PdfReadError
 
 from auditoria.models import EventoAuditoria
 from auditoria.services import registrar_evento
-from usuarios.decorators import email_verificado_required
 from usuarios.models import Cargo
 
 from .forms import DocumentoForm
@@ -114,7 +113,6 @@ def _campo_serializado(campo):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def documents_view(request):
     context = sender_documents_context(request.user)
@@ -127,7 +125,6 @@ def documents_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def committee_recipients_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -143,7 +140,6 @@ def committee_recipients_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def send_review_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -178,7 +174,6 @@ def send_review_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_POST
 def send_document_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -262,7 +257,6 @@ def send_document_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def upload_document_view(request):
     if not _es_presidente_activo(request.user):
@@ -293,7 +287,6 @@ def upload_document_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def owned_document_detail_view(request, pk):
     tracking_recipients = DestinatarioDocumento.objects.select_related(
@@ -314,7 +307,6 @@ def owned_document_detail_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def view_document_view(request, pk):
     documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
@@ -322,7 +314,6 @@ def view_document_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def download_document_view(request, pk):
     if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
@@ -354,7 +345,6 @@ def _respuesta_archivo_pdf(campo_archivo, nombre, como_adjunto=False):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def received_document_view(request, pk):
     with transaction.atomic():
@@ -395,7 +385,6 @@ def received_document_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def view_result_view(request, pk):
     permiso = (
@@ -422,7 +411,6 @@ def view_result_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def download_result_view(request, pk):
     if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
@@ -456,7 +444,6 @@ def editor_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def document_editor_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -491,7 +478,6 @@ def document_editor_view(request, pk):
 
 
 @login_required
-@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def signature_fields_view(request, pk):
     documento = _documento_de_presidente(request, pk)
@@ -603,14 +589,12 @@ def review_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def pending_view(request):
     return redirect("documentos:user_pending")
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def user_documents_view(request, status=None):
     selected_status = status or request.GET.get("estado", "todos")

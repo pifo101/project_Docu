@@ -1,17 +1,12 @@
 from importlib import import_module
-from datetime import timedelta
 from types import SimpleNamespace
-from urllib.parse import urlparse
 
 from django.apps import apps
 from django.core import mail
 from django.contrib.auth import authenticate, get_user_model
 from django.db import connection, IntegrityError, transaction
-from django.test import Client, TestCase, override_settings
-from django.urls import reverse
-from django.utils import timezone
-
-from auditoria.models import EventoAuditoria
+from django.test import Client, TestCase
+from django.urls import NoReverseMatch, reverse
 
 from .constants import OFFICIAL_COMMITTEE_NAMES
 from .forms import RegistroUsuarioForm
@@ -46,10 +41,7 @@ class AuthPagesTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inicia sesión")
-        self.assertNotContains(
-            response,
-            f'action="{reverse("usuarios:resend_verification")}"',
-        )
+        self.assertNotContains(response, "verifica tu correo", html=False)
 
     def test_register_page_renders(self):
         response = self.client.get(reverse("usuarios:register"))
@@ -220,8 +212,11 @@ class RegistroUsuarioTests(TestCase):
         self.assertEqual(usuario.cargo, self.cargo)
         self.assertNotEqual(usuario.password, self.password)
         self.assertTrue(usuario.check_password(self.password))
-        self.assertFalse(usuario.email_verificado)
+        self.assertTrue(usuario.email_verificado)
         self.assertIsNone(usuario.fecha_verificacion_email)
+        self.assertIsNone(usuario.fecha_ultimo_envio_verificacion)
+        self.assertEqual(usuario.version_verificacion_email, 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_selectores_muestran_datos_de_los_modelos(self):
         response = self.client.get(reverse("usuarios:register"))
@@ -423,12 +418,7 @@ class RegistroUsuarioTests(TestCase):
         )
 
 
-@override_settings(
-    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    EMAIL_VERIFICATION_TIMEOUT=3600,
-    EMAIL_VERIFICATION_RESEND_COOLDOWN=300,
-)
-class VerificacionEmailTests(TestCase):
+class FlujoRegistroSinVerificacionTests(TestCase):
     password = "ClaveSegura!2026"
 
     @classmethod
@@ -439,8 +429,8 @@ class VerificacionEmailTests(TestCase):
     def datos_registro(self, **changes):
         datos = {
             "first_name": "Correo",
-            "last_name": "Pendiente",
-            "email": "pendiente@adicla.org.gt",
+            "last_name": "Funcional",
+            "email": "funcional@adicla.org.gt",
             "comite": self.comite.pk,
             "cargo": self.miembro.codigo,
             "password1": self.password,
@@ -455,114 +445,50 @@ class VerificacionEmailTests(TestCase):
             self.datos_registro(),
         )
 
-    def ruta_verificacion(self, mensaje=-1):
-        linea = next(
-            linea
-            for linea in mail.outbox[mensaje].body.splitlines()
-            if linea.startswith("Verificar correo: ")
-        )
-        return urlparse(linea.removeprefix("Verificar correo: ")).path
-
-    def test_registro_pendiente_genera_correo_sin_secretos_en_auditoria(self):
+    def test_registro_no_envia_correo_ni_genera_datos_de_token(self):
         response = self.registrar()
-        usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
+        usuario = get_user_model().objects.get(email="funcional@adicla.org.gt")
 
         self.assertRedirects(response, reverse("usuarios:login"))
-        self.assertFalse(usuario.email_verificado)
-        self.assertIsNone(usuario.fecha_verificacion_email)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, [usuario.email])
-        self.assertNotIn(self.password, mail.outbox[0].body)
-        self.assertIn("expira", mail.outbox[0].body)
-        for evento in EventoAuditoria.objects.all():
-            self.assertNotIn("token", str(evento.informacion_adicional).lower())
-
-    def test_enlace_valido_verifica_y_no_puede_reutilizarse(self):
-        self.registrar()
-        usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
-        self.client.force_login(usuario)
-
-        ruta = self.ruta_verificacion()
-        confirmacion = self.client.get(ruta)
-        usuario.refresh_from_db()
-
-        self.assertEqual(confirmacion.status_code, 200)
-        self.assertContains(confirmacion, "verification-card--pending")
-        self.assertFalse(usuario.email_verificado)
-        self.assertIn("no-store", confirmacion["Cache-Control"])
-        self.assertEqual(confirmacion["Referrer-Policy"], "no-referrer")
-
-        response = self.client.post(ruta)
-        usuario.refresh_from_db()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "verification-card--success")
         self.assertTrue(usuario.email_verificado)
-        self.assertIsNotNone(usuario.fecha_verificacion_email)
-        self.assertTrue(response.wsgi_request.user.email_verificado)
-        self.assertContains(
-            self.client.get(reverse("usuarios:dashboard")),
-            "Requieren tu atención",
-        )
-        self.assertEqual(self.client.post(ruta).status_code, 400)
+        self.assertIsNone(usuario.fecha_verificacion_email)
+        self.assertIsNone(usuario.fecha_ultimo_envio_verificacion)
+        self.assertEqual(usuario.version_verificacion_email, 0)
+        self.assertEqual(len(mail.outbox), 0)
 
-    def test_token_alterado_y_token_expirado_fallan_sin_verificar(self):
+    def test_registro_login_dashboard_funcionan_inmediatamente(self):
         self.registrar()
-        ruta = self.ruta_verificacion()
-        usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
 
-        ruta_alterada = f"{ruta.rstrip('/')}alterado/"
-        respuesta_alterada = self.client.get(ruta_alterada)
-        self.assertEqual(respuesta_alterada.status_code, 400)
-        self.assertContains(
-            respuesta_alterada,
-            "verification-card--error",
-            status_code=400,
-        )
-        with self.settings(EMAIL_VERIFICATION_TIMEOUT=-1):
-            self.assertEqual(self.client.get(ruta).status_code, 400)
-        usuario.refresh_from_db()
-        self.assertFalse(usuario.email_verificado)
-
-    def test_reenvio_invalida_token_anterior_y_limita_repeticiones(self):
-        self.registrar()
-        usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
-        token_anterior = self.ruta_verificacion()
-        usuario.fecha_ultimo_envio_verificacion = timezone.now() - timedelta(minutes=6)
-        usuario.save(update_fields=("fecha_ultimo_envio_verificacion",))
-
-        respuesta = self.client.post(
-            reverse("usuarios:resend_verification"),
-            {"email": usuario.email},
+        login_response = self.client.post(
+            reverse("usuarios:login"),
+            {"email": "funcional@adicla.org.gt", "password": self.password},
         )
 
-        self.assertRedirects(respuesta, reverse("usuarios:login"))
-        self.assertEqual(len(mail.outbox), 2)
-        token_nuevo = self.ruta_verificacion()
-        self.assertNotEqual(token_anterior, token_nuevo)
-        self.assertEqual(self.client.get(token_anterior).status_code, 400)
+        self.assertRedirects(login_response, reverse("usuarios:dashboard"))
+        dashboard = self.client.get(reverse("usuarios:dashboard"))
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertContains(dashboard, "Requieren tu atención")
+        self.assertNotContains(dashboard, "verifica tu correo", html=False)
 
-        self.client.post(
-            reverse("usuarios:resend_verification"),
-            {"email": usuario.email},
+    def test_indicador_historico_no_bloquea_login_dashboard_ni_perfil(self):
+        usuario = get_user_model().objects.create_user(
+            email="historico-pendiente@adicla.org.gt",
+            password=self.password,
+            comite=self.comite,
+            cargo=self.miembro,
+            email_verificado=False,
         )
-        self.client.post(
-            reverse("usuarios:resend_verification"),
-            {"email": "inexistente@adicla.org.gt"},
+
+        response = self.client.post(
+            reverse("usuarios:login"),
+            {"email": usuario.email, "password": self.password},
         )
-        self.assertEqual(len(mail.outbox), 2)
-        self.assertEqual(self.client.post(token_nuevo).status_code, 200)
 
-    def test_confirmacion_requiere_csrf(self):
-        self.registrar()
-        ruta = self.ruta_verificacion()
-        cliente = Client(enforce_csrf_checks=True)
+        self.assertRedirects(response, reverse("usuarios:dashboard"))
+        self.assertEqual(self.client.get(reverse("usuarios:dashboard")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("usuarios:profile")).status_code, 200)
 
-        self.assertEqual(cliente.post(ruta).status_code, 403)
-        usuario = get_user_model().objects.get(email="pendiente@adicla.org.gt")
-        self.assertFalse(usuario.email_verificado)
-
-    def test_cambio_de_correo_revoca_verificacion(self):
+    def test_cambio_de_correo_no_crea_estado_pendiente(self):
         usuario = get_user_model().objects.create_user(
             email="original@adicla.org.gt",
             password=self.password,
@@ -575,11 +501,11 @@ class VerificacionEmailTests(TestCase):
         usuario.save(update_fields=("email",))
         usuario.refresh_from_db()
 
-        self.assertFalse(usuario.email_verificado)
+        self.assertTrue(usuario.email_verificado)
         self.assertIsNone(usuario.fecha_verificacion_email)
-        self.assertEqual(usuario.version_verificacion_email, 1)
+        self.assertEqual(usuario.version_verificacion_email, 0)
 
-    def test_usuario_historico_y_registro_administrativo_siguen_verificados(self):
+    def test_registro_administrativo_sigue_funcionando(self):
         historico = get_user_model().objects.create_user(
             email="historico@adicla.org.gt",
             password=self.password,
@@ -598,30 +524,28 @@ class VerificacionEmailTests(TestCase):
             authenticate(email=historico.email, password=self.password)
         )
 
-    def test_login_logout_permanecen_disponibles_mientras_esta_pendiente(self):
-        self.registrar()
+    def test_urls_de_verificacion_ya_no_existen(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("usuarios:verify_email", args=["token"])
+        with self.assertRaises(NoReverseMatch):
+            reverse("usuarios:resend_verification")
+
+    def test_usuario_inactivo_sigue_sin_poder_iniciar_sesion(self):
+        usuario = get_user_model().objects.create_user(
+            email="inactivo@adicla.org.gt",
+            password=self.password,
+            comite=self.comite,
+            cargo=self.miembro,
+            is_active=False,
+        )
 
         response = self.client.post(
             reverse("usuarios:login"),
-            {"email": "pendiente@adicla.org.gt", "password": self.password},
+            {"email": usuario.email, "password": self.password},
         )
 
-        self.assertRedirects(response, reverse("usuarios:dashboard"))
-        pending_response = self.client.get(reverse("usuarios:dashboard"))
-        self.assertContains(pending_response, "Tu cuenta necesita verificación")
-        self.assertContains(pending_response, "pendiente@adicla.org.gt")
-        self.assertContains(
-            pending_response,
-            f'action="{reverse("usuarios:resend_verification")}"',
-        )
-        self.assertContains(
-            self.client.get(reverse("usuarios:profile")),
-            "Verifica tu correo",
-        )
-        self.assertRedirects(
-            self.client.post(reverse("usuarios:logout")),
-            reverse("usuarios:login"),
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
 
 class AutenticacionPorCorreoTests(TestCase):

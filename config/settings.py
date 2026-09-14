@@ -178,12 +178,4 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@adicla.org.gt")
-EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
-EMAIL_VERIFICATION_RESEND_COOLDOWN = int(
-    os.getenv("EMAIL_VERIFICATION_RESEND_COOLDOWN", "300")
-)
-if EMAIL_VERIFICATION_TIMEOUT <= 0 or EMAIL_VERIFICATION_RESEND_COOLDOWN < 0:
-    raise ImproperlyConfigured(
-        "Email verification timeout must be positive and resend cooldown non-negative"
-    )
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

@@ -739,25 +739,12 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EnvioDocumento.objects.exists())
 
-    def test_presidente_no_verificado_no_puede_gestionar_documentos(self):
+    def test_indicador_historico_no_bloquea_gestion_documental_autorizada(self):
         self.presidente.email_verificado = False
         self.presidente.save(update_fields=("email_verificado",))
         self.client.force_login(self.presidente)
 
-        self.assertEqual(
-            self.client.get(reverse("documentos:upload")).status_code,
-            403,
-        )
-        self.assertEqual(
-            self.client.post(
-                reverse("documentos:committee_recipients", args=[self.documento.pk])
-            ).status_code,
-            403,
-        )
-        self.assertFalse(EnvioDocumento.objects.exists())
-
-        self.presidente.email_verificado = True
-        self.presidente.save(update_fields=("email_verificado",))
+        self.assertEqual(self.client.get(reverse("documentos:upload")).status_code, 200)
         self.assertRedirects(
             self.client.post(
                 reverse("documentos:committee_recipients", args=[self.documento.pk])
@@ -1012,7 +999,7 @@ class EnvioDocumentoTests(TestCase):
             200,
         )
 
-    def test_cambio_de_correo_conserva_asignacion_hasta_reverificar(self):
+    def test_cambio_de_correo_conserva_asignacion_y_acceso(self):
         self.preparar_envio_con_campo()
         self.client.post(reverse("documentos:send", args=[self.documento.pk]))
         destinatario = DestinatarioDocumento.objects.get(
@@ -1026,19 +1013,10 @@ class EnvioDocumentoTests(TestCase):
             self.client.get(
                 reverse("documentos:received_document", args=[destinatario.pk])
             ).status_code,
-            403,
+            200,
         )
         destinatario.refresh_from_db()
         self.assertEqual(destinatario.usuario_id, self.miembro.pk)
-
-        self.miembro.email_verificado = True
-        self.miembro.save(update_fields=("email_verificado",))
-        self.assertEqual(
-            self.client.get(
-                reverse("documentos:received_document", args=[destinatario.pk])
-            ).status_code,
-            200,
-        )
 
     def test_comite_inactivo_tras_envio_no_revoca_destinatario(self):
         self.preparar_envio_con_campo()
