@@ -182,10 +182,15 @@
 }
 
 .app-sidebar__logout .app-sidebar__logout-button:hover,
-.app-sidebar__logout .app-sidebar__logout-button:focus-visible {
+.app-sidebar__logout .app-sidebar__logout-button:focus-visible,
+.app-sidebar__logout .app-sidebar__logout-button:active {
     color: white;
     background: rgba(8, 36, 111, 0.72);
-    outline: none;
+}
+
+.app-sidebar__logout .app-sidebar__logout-button:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
 }
 
 .app-sidebar__logout .app-sidebar__logout-button svg {
