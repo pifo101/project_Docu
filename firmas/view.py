@@ -13,8 +13,6 @@ from auditoria.models import EventoAuditoria
 from auditoria.services import registrar_evento
 from documentos.models import DestinatarioDocumento, EnvioDocumento
 from documentos.services import ResultadoPDFError, generar_resultado_si_completo
-from usuarios.decorators import email_verificado_required
-
 from .forms import FirmaForm, FirmaPerfilForm
 from .models import Firma, FirmaPerfil
 
@@ -83,7 +81,6 @@ def completed_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_POST
 def profile_signature_save_view(request):
     form = FirmaPerfilForm(request.POST, request.FILES)
@@ -106,7 +103,6 @@ def profile_signature_save_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_POST
 def profile_signature_delete_view(request):
     FirmaPerfil.objects.filter(usuario=request.user).delete()
@@ -115,7 +111,6 @@ def profile_signature_delete_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_GET
 def profile_signature_preview_view(request):
     firma_perfil = get_object_or_404(FirmaPerfil, usuario=request.user)
@@ -127,7 +122,6 @@ def profile_signature_preview_view(request):
 
 
 @login_required
-@email_verificado_required
 @require_http_methods(["GET", "POST"])
 def recipient_sign_view(request, pk):
     destinatario = get_object_or_404(

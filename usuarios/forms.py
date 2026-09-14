@@ -103,24 +103,6 @@ class RegistroPublicoUsuarioForm(RegistroUsuarioForm):
             codigo__in=Cargo.Codigo.values,
         )
 
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.email_verificado = False
-        user.fecha_verificacion_email = None
-        if commit:
-            user.save()
-            self.save_m2m()
-        return user
-
-
-class ReenvioVerificacionForm(forms.Form):
-    email = forms.EmailField(label="Correo institucional")
-
-    def clean_email(self):
-        email = normalize_institutional_email(self.cleaned_data["email"])
-        validate_institutional_email(email)
-        return email
-
 
 class LoginUsuarioForm(forms.Form):
     email = forms.EmailField(label="Correo institucional")

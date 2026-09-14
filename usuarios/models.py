@@ -178,20 +178,4 @@ class Usuario(AbstractUser):
     def save(self, *args, **kwargs):
         self.email = normalize_institutional_email(self.email)
         validate_institutional_email(self.email)
-        update_fields = kwargs.get("update_fields")
-        if self.pk and (update_fields is None or "email" in update_fields):
-            email_anterior = type(self).objects.filter(pk=self.pk).values_list(
-                "email", flat=True
-            ).first()
-            if email_anterior and email_anterior != self.email:
-                self.email_verificado = False
-                self.fecha_verificacion_email = None
-                self.version_verificacion_email += 1
-                if update_fields is not None:
-                    kwargs["update_fields"] = tuple(set(update_fields) | {
-                        "email",
-                        "email_verificado",
-                        "fecha_verificacion_email",
-                        "version_verificacion_email",
-                    })
         return super().save(*args, **kwargs)
