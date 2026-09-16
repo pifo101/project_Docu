@@ -19,9 +19,9 @@ from pypdf.errors import PdfReadError
 
 from auditoria.models import EventoAuditoria
 from auditoria.services import registrar_evento
-from usuarios.models import Cargo
+from usuarios.models import Cargo, Usuario
 
-from .forms import DocumentoForm
+from .forms import DocumentoForm, SeleccionDestinatariosForm
 from .models import CampoFirma, DestinatarioDocumento, Documento, DocumentoResultado, EnvioDocumento
 from .services import (
     document_tracking_context,
@@ -53,8 +53,16 @@ def _integrantes_del_comite(request):
     )
 
 
-def _preparar_envio(documento, request):
-    integrantes = list(_integrantes_del_comite(request))
+def _usuarios_disponibles():
+    return (
+        Usuario.objects.filter(is_active=True, comite__activo=True)
+        .select_related("cargo", "comite")
+        .order_by("first_name", "last_name", "email")
+    )
+
+
+def _preparar_envio(documento, request, usuarios):
+    usuarios = list(usuarios)
     with transaction.atomic():
         envio, creado = EnvioDocumento.objects.select_for_update().get_or_create(
             documento=documento,
@@ -69,19 +77,19 @@ def _preparar_envio(documento, request):
         ):
             raise PermissionDenied
 
-        ids_integrantes = {integrante.pk for integrante in integrantes}
-        envio.destinatarios.exclude(usuario_id__in=ids_integrantes).delete()
+        ids_usuarios = {usuario.pk for usuario in usuarios}
+        envio.destinatarios.exclude(usuario_id__in=ids_usuarios).delete()
         destinatarios_existentes = set(
             envio.destinatarios.values_list("usuario_id", flat=True)
         )
         DestinatarioDocumento.objects.bulk_create([
             DestinatarioDocumento(
                 envio=envio,
-                usuario=integrante,
+                usuario=usuario,
                 estado=DestinatarioDocumento.Estado.BORRADOR,
             )
-            for integrante in integrantes
-            if integrante.pk not in destinatarios_existentes
+            for usuario in usuarios
+            if usuario.pk not in destinatarios_existentes
         ])
     return envio
 
@@ -129,13 +137,44 @@ def documents_view(request):
 def committee_recipients_view(request, pk):
     documento = _documento_de_presidente(request, pk)
     integrantes = _integrantes_del_comite(request)
+    usuarios_disponibles = _usuarios_disponibles()
     if request.method == "POST":
-        _preparar_envio(documento, request)
-        return redirect("documentos:document_editor", pk=documento.pk)
+        datos = request.POST.copy()
+        if not datos.get("recipient_mode"):
+            datos["recipient_mode"] = SeleccionDestinatariosForm.Modo.COMITE
+        form = SeleccionDestinatariosForm(
+            datos,
+            usuarios_disponibles=usuarios_disponibles,
+        )
+        if form.is_valid():
+            if form.cleaned_data["recipient_mode"] == SeleccionDestinatariosForm.Modo.COMITE:
+                destinatarios = integrantes
+            else:
+                destinatarios = form.cleaned_data["recipients"]
+            _preparar_envio(documento, request, destinatarios)
+            return redirect("documentos:document_editor", pk=documento.pk)
+    else:
+        form = SeleccionDestinatariosForm(
+            initial={"recipient_mode": SeleccionDestinatariosForm.Modo.COMITE},
+            usuarios_disponibles=usuarios_disponibles,
+        )
     return render(request, "documentos/recipients.html", {
         "documento": documento,
         "comite": request.user.comite,
         "integrantes": integrantes,
+        "usuarios_disponibles": usuarios_disponibles,
+        "directorio_destinatarios": [
+            {
+                "id": usuario.pk,
+                "name": str(usuario),
+                "email": usuario.email,
+                "committee": usuario.comite.nombre,
+                "committee_id": usuario.comite_id,
+                "role": usuario.cargo.nombre,
+            }
+            for usuario in usuarios_disponibles
+        ],
+        "form": form,
     })
 
 
@@ -148,7 +187,7 @@ def send_review_view(request, pk):
         messages.info(request, "Primero asigna un campo de firma a cada destinatario.")
         return redirect("documentos:committee_recipients", pk=documento.pk)
     if envio.estado == EnvioDocumento.Estado.ENVIADO:
-        messages.info(request, "Este documento ya fue enviado al comité.")
+        messages.info(request, "Este documento ya fue enviado a sus destinatarios.")
         return redirect("documentos:document_detail", pk=documento.pk)
     destinatarios = list(
         envio.destinatarios.select_related("usuario__cargo")
@@ -190,14 +229,9 @@ def send_document_view(request, pk):
         if envio.remitente_id != request.user.pk:
             raise PermissionDenied
         if envio.estado == EnvioDocumento.Estado.ENVIADO:
-            messages.info(request, "Este documento ya fue enviado al comité.")
+            messages.info(request, "Este documento ya fue enviado a sus destinatarios.")
             return redirect("documentos:document_detail", pk=documento.pk)
 
-        DestinatarioDocumento.objects.get_or_create(
-            envio=envio,
-            usuario=envio.remitente,
-            defaults={"estado": DestinatarioDocumento.Estado.BORRADOR},
-        )
         destinatarios = list(
             envio.destinatarios.select_for_update().select_related(
                 "usuario__comite"
@@ -214,7 +248,6 @@ def send_document_view(request, pk):
             return redirect("documentos:send_review", pk=documento.pk)
         if any(
             not destinatario.usuario.is_active
-            or destinatario.usuario.comite_id != request.user.comite_id
             or not destinatario.usuario.comite.activo
             for destinatario in destinatarios
         ):
@@ -251,7 +284,7 @@ def send_document_view(request, pk):
 
     messages.success(
         request,
-        f"El documento se envió a {len(destinatarios)} integrante(s) del comité.",
+        f"El documento se envió a {len(destinatarios)} destinatario(s).",
     )
     return redirect("documentos:document_detail", pk=documento.pk)
 

@@ -50,31 +50,56 @@
                         <strong data-recipient-count>{% if documento %}{{ integrantes|length }} destinatario{% if integrantes|length != 1 %}s{% endif %}{% else %}0 destinatarios{% endif %}</strong>
                     </div>
                     <div class="recipient-summary__content" data-recipient-summary aria-live="polite">
-                        {% if documento %}<p>Se incluirán únicamente los integrantes activos de {{ comite.nombre }}.</p><ul class="recipient-summary__people">{% for integrante in integrantes %}<li>{{ integrante }}</li>{% endfor %}</ul>{% else %}<p>Selecciona un modo para comenzar.</p>{% endif %}
+                        {% if documento %}<p>Se incluirán los integrantes activos de {{ comite.nombre }}.</p><ul class="recipient-summary__people">{% for integrante in integrantes %}<li>{{ integrante }}</li>{% endfor %}</ul>{% else %}<p>Selecciona un modo para comenzar.</p>{% endif %}
                     </div>
                 </section>
             </aside>
 
             {% if documento %}
-            <form class="recipient-form workflow-card" method="post" action="{% url 'documentos:committee_recipients' documento.pk %}">
+            <form class="recipient-form workflow-card" method="post" action="{% url 'documentos:committee_recipients' documento.pk %}" data-real-recipient-form novalidate>
                 {% csrf_token %}
                 <fieldset class="recipient-modes">
                     <legend>Tipo de destinatario</legend>
                     <div class="recipient-mode-grid">
-                        <label class="recipient-mode-card"><input type="radio" disabled><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">1</span><strong>Una persona</strong><small>Disponible en una etapa posterior.</small></label>
-                        <label class="recipient-mode-card"><input type="radio" checked><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">C</span><strong>Comité completo</strong><small>Envía el documento a los integrantes activos de tu comité.</small></label>
-                        <label class="recipient-mode-card"><input type="radio" disabled><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">+</span><strong>Personas específicas</strong><small>Disponible en una etapa posterior.</small></label>
+                        <label class="recipient-mode-card"><input type="radio" name="recipient_mode" value="single" data-recipient-mode{% if form.recipient_mode.value == "single" %} checked{% endif %}><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">1</span><strong>Una persona</strong><small>Envía el documento a un único destinatario.</small></label>
+                        <label class="recipient-mode-card"><input type="radio" name="recipient_mode" value="committee" data-recipient-mode{% if form.recipient_mode.value == "committee" or not form.recipient_mode.value %} checked{% endif %}><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">C</span><strong>Comité completo</strong><small>Envía el documento a los integrantes activos de tu comité.</small></label>
+                        <label class="recipient-mode-card"><input type="radio" name="recipient_mode" value="people" data-recipient-mode{% if form.recipient_mode.value == "people" %} checked{% endif %}><span class="recipient-mode-card__control"></span><span class="recipient-mode-card__icon">+</span><strong>Personas específicas</strong><small>Selecciona varias personas de los comités activos.</small></label>
                     </div>
                 </fieldset>
-                <section class="recipient-mode-panel">
+
+                <select name="recipients" data-recipient-values multiple hidden aria-hidden="true">
+                    {% for usuario in usuarios_disponibles %}<option value="{{ usuario.pk }}"{% if usuario.pk|stringformat:"s" in form.recipients.value %} selected{% endif %}>{{ usuario }}</option>{% endfor %}
+                </select>
+
+                <section class="recipient-mode-panel" data-mode-panel="single" hidden>
+                    <div class="recipient-section-heading"><div><h2>Una persona</h2><p>Busca por nombre o correo y selecciona exactamente una persona.</p></div></div>
+                    <label class="recipient-search-label" for="single-person-search-real">Buscar persona</label>
+                    <div class="recipient-search"><span aria-hidden="true">⌕</span><input id="single-person-search-real" type="search" placeholder="Buscar por nombre o correo..." autocomplete="off" data-person-search="single"></div>
+                    <div class="recipient-results" data-person-results="single" aria-label="Resultados de personas"></div>
+                    <section class="selected-recipient-section" data-selection="single" hidden><h3>Destinatario seleccionado</h3><div class="selected-people-list" data-selected-people="single"></div></section>
+                </section>
+
+                <section class="recipient-mode-panel" data-mode-panel="committee" hidden>
                     <div class="recipient-section-heading"><div><h2>{{ comite.nombre }}</h2><p>El comité se determina a partir de tu usuario y no puede cambiarse aquí.</p></div></div>
                     <section class="committee-selection">
                         <div class="committee-selection__heading"><div><strong>{{ comite.nombre }}</strong><span>{{ integrantes|length }} destinatario{% if integrantes|length != 1 %}s{% endif %}</span></div><span class="included-badge">Incluidos automáticamente</span></div>
                         <details class="committee-members" open><summary>Ver integrantes</summary><ul>{% for integrante in integrantes %}<li>{{ integrante }} · {{ integrante.cargo.nombre }}</li>{% empty %}<li>No hay otros integrantes activos en este comité.</li>{% endfor %}</ul></details>
                     </section>
                 </section>
-                <div class="preparation-actions recipient-actions"><a class="outline-action" href="{% url 'documentos:list' %}"><span aria-hidden="true">←</span> Volver</a><button class="primary-action" type="submit"{% if not integrantes %} disabled{% endif %}>Continuar <span aria-hidden="true">→</span></button></div>
+
+                <section class="recipient-mode-panel" data-mode-panel="people" hidden>
+                    <div class="recipient-section-heading"><div><h2>Personas específicas</h2><p>Busca, agrega y quita personas antes de continuar.</p></div></div>
+                    <label class="recipient-search-label" for="multiple-person-search-real">Buscar personas</label>
+                    <div class="recipient-search"><span aria-hidden="true">⌕</span><input id="multiple-person-search-real" type="search" placeholder="Buscar por nombre o correo..." autocomplete="off" data-person-search="people"></div>
+                    <div class="recipient-results" data-person-results="people" aria-label="Resultados de personas"></div>
+                    <section class="selected-recipient-section" data-selection="people" hidden><h3>Personas seleccionadas</h3><div class="selected-people-list" data-selected-people="people"></div></section>
+                </section>
+
+                <span class="recipient-results-status" data-recipient-results-status aria-live="polite"></span>
+                <p class="recipient-feedback" role="status" aria-live="polite" data-recipient-error>{% for error in form.recipient_mode.errors %}{{ error }} {% endfor %}{% for error in form.recipients.errors %}{{ error }} {% endfor %}</p>
+                <div class="preparation-actions recipient-actions"><a class="outline-action" href="{% url 'documentos:list' %}"><span aria-hidden="true">←</span> Volver</a><button class="primary-action" type="submit" data-recipient-submit>Continuar <span aria-hidden="true">→</span></button></div>
             </form>
+            {{ directorio_destinatarios|json_script:"recipient-directory" }}
             {% else %}
             <form class="recipient-form workflow-card" data-recipient-form novalidate>
                 <fieldset class="recipient-modes">
@@ -201,4 +226,4 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}{% if not documento %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endif %}{% endblock %}
+{% block extra_js %}{% if documento %}<script src="{% static 'js/recipient-selection.js' %}" defer></script>{% else %}<script src="{% static 'js/workflow.js' %}" defer></script>{% endif %}{% endblock %}
