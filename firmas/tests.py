@@ -1,4 +1,5 @@
 import base64
+import json
 import shutil
 import struct
 import tempfile
@@ -608,6 +609,131 @@ class FirmaFlujoTests(TestCase):
         self.assertNotIn("imagen", evento.informacion_adicional)
         self.assertNotIn("token", evento.informacion_adicional)
 
+    def test_completa_y_persiste_nombre_fecha_texto_iniciales_y_checkbox(self):
+        campos = {
+            tipo: CampoFirma.objects.create(
+                destinatario=self.solicitud,
+                tipo=tipo,
+                pagina=1,
+                x=Decimal("0.1"),
+                y=Decimal(str(0.32 + index * 0.1)),
+                ancho=Decimal("0.35"),
+                alto=Decimal("0.07"),
+                etiqueta="Comentario" if tipo == CampoFirma.Tipo.TEXTO else "",
+                requerido=tipo != CampoFirma.Tipo.CHECKBOX,
+            )
+            for index, tipo in enumerate((
+                CampoFirma.Tipo.NOMBRE,
+                CampoFirma.Tipo.FECHA,
+                CampoFirma.Tipo.TEXTO,
+                CampoFirma.Tipo.INICIALES,
+                CampoFirma.Tipo.CHECKBOX,
+            ))
+        }
+
+        response = self._post(valores_campos=json.dumps({
+            str(campos[CampoFirma.Tipo.TEXTO].pk): "Texto confirmado",
+            str(campos[CampoFirma.Tipo.CHECKBOX].pk): False,
+        }))
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        for campo in campos.values():
+            campo.refresh_from_db()
+            self.assertIsNotNone(campo.fecha_completado)
+        self.assertEqual(campos[CampoFirma.Tipo.NOMBRE].valor, str(self.destinatario))
+        self.assertEqual(campos[CampoFirma.Tipo.FECHA].valor, timezone.localdate().strftime("%d/%m/%Y"))
+        self.assertEqual(campos[CampoFirma.Tipo.TEXTO].valor, "Texto confirmado")
+        self.assertEqual(campos[CampoFirma.Tipo.INICIALES].valor, "DP")
+        self.assertEqual(campos[CampoFirma.Tipo.CHECKBOX].valor, "false")
+
+    def test_checkbox_requerido_debe_estar_marcado(self):
+        checkbox = CampoFirma.objects.create(
+            destinatario=self.solicitud,
+            tipo=CampoFirma.Tipo.CHECKBOX,
+            pagina=1,
+            x=Decimal("0.5"),
+            y=Decimal("0.2"),
+            ancho=Decimal("0.1"),
+            alto=Decimal("0.1"),
+        )
+
+        response = self._post(valores_campos=json.dumps({str(checkbox.pk): False}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Marca el campo")
+        self.assertFalse(Firma.objects.exists())
+        checkbox.refresh_from_db()
+        self.assertIsNone(checkbox.valor)
+
+    def test_checkbox_marcado_se_persiste(self):
+        checkbox = CampoFirma.objects.create(
+            destinatario=self.solicitud,
+            tipo=CampoFirma.Tipo.CHECKBOX,
+            pagina=1,
+            x=Decimal("0.5"),
+            y=Decimal("0.2"),
+            ancho=Decimal("0.1"),
+            alto=Decimal("0.1"),
+        )
+
+        self._post(valores_campos=json.dumps({str(checkbox.pk): True}))
+
+        checkbox.refresh_from_db()
+        self.assertEqual(checkbox.valor, "true")
+
+    def test_texto_requerido_vacio_impide_finalizar(self):
+        texto = CampoFirma.objects.create(
+            destinatario=self.solicitud,
+            tipo=CampoFirma.Tipo.TEXTO,
+            etiqueta="Motivo",
+            pagina=1,
+            x=Decimal("0.4"),
+            y=Decimal("0.4"),
+            ancho=Decimal("0.3"),
+            alto=Decimal("0.1"),
+        )
+
+        response = self._post(valores_campos=json.dumps({str(texto.pk): "  "}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Completa el campo")
+        self.assertFalse(Firma.objects.exists())
+        self.solicitud.refresh_from_db()
+        self.assertNotEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
+
+    def test_ids_de_campos_ajenos_se_rechazan_sin_persistir(self):
+        propio = CampoFirma.objects.create(
+            destinatario=self.solicitud,
+            tipo=CampoFirma.Tipo.TEXTO,
+            pagina=1,
+            x=Decimal("0.4"), y=Decimal("0.4"),
+            ancho=Decimal("0.3"), alto=Decimal("0.1"),
+        )
+        solicitud_ajena = DestinatarioDocumento.objects.create(
+            envio=self.envio,
+            usuario=self.no_destinatario,
+        )
+        ajeno = CampoFirma.objects.create(
+            destinatario=solicitud_ajena,
+            tipo=CampoFirma.Tipo.TEXTO,
+            pagina=1,
+            x=Decimal("0.1"), y=Decimal("0.1"),
+            ancho=Decimal("0.2"), alto=Decimal("0.1"),
+        )
+
+        response = self._post(valores_campos=json.dumps({
+            str(propio.pk): "Propio",
+            str(ajeno.pk): "Alterado",
+        }))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "no corresponden al documento")
+        self.assertFalse(Firma.objects.exists())
+        propio.refresh_from_db()
+        ajeno.refresh_from_db()
+        self.assertIsNone(propio.valor)
+        self.assertIsNone(ajeno.valor)
+
     def test_ultima_firma_genera_pdf_resultante_automaticamente(self):
         self._usar_pdf_valido()
 
@@ -982,7 +1108,7 @@ class FirmaFlujoTests(TestCase):
         self.assertContains(response, 'data-signature-tab="PERFIL"')
         self.assertContains(response, 'class="saved-signature-preview"')
         self.assertContains(response, 'data-signature-panel="DIBUJADA" hidden')
-        self.assertContains(response, "protected-viewer-1", count=2)
+        self.assertContains(response, "interactive-fields-1", count=2)
         self.assertFalse(Firma.objects.exists())
 
     def test_guardar_firma_perfil_no_firma_documento_automaticamente(self):

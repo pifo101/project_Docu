@@ -145,11 +145,24 @@ class DestinatarioDocumento(models.Model):
 
 
 class CampoFirma(models.Model):
+    class Tipo(models.TextChoices):
+        FIRMA = "FIRMA", "Firma"
+        NOMBRE = "NOMBRE", "Nombre"
+        FECHA = "FECHA", "Fecha"
+        TEXTO = "TEXTO", "Texto"
+        INICIALES = "INICIALES", "Iniciales"
+        CHECKBOX = "CHECKBOX", "Checkbox"
+
     destinatario = models.ForeignKey(
         DestinatarioDocumento,
         on_delete=models.CASCADE,
         related_name="campos_firma",
     )
+    tipo = models.CharField(max_length=12, choices=Tipo.choices, default=Tipo.FIRMA)
+    requerido = models.BooleanField(default=True)
+    etiqueta = models.CharField(max_length=60, blank=True)
+    valor = models.TextField(null=True, blank=True)
+    fecha_completado = models.DateTimeField(null=True, blank=True)
     pagina = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     x = models.DecimalField(
         max_digits=7,
@@ -174,8 +187,8 @@ class CampoFirma(models.Model):
 
     class Meta:
         ordering = ("pagina", "id")
-        verbose_name = "campo de firma"
-        verbose_name_plural = "campos de firma"
+        verbose_name = "campo de documento"
+        verbose_name_plural = "campos de documento"
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(x__gte=0, x__lte=1, y__gte=0, y__lte=1),
@@ -211,4 +224,4 @@ class CampoFirma(models.Model):
             raise ValidationError({"alto": "El campo excede el alto de la página."})
 
     def __str__(self):
-        return f"Firma para {self.destinatario.usuario} en página {self.pagina}"
+        return f"{self.get_tipo_display()} para {self.destinatario.usuario} en página {self.pagina}"

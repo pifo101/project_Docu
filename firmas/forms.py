@@ -1,5 +1,6 @@
 import base64
 import binascii
+import json
 
 from django.conf import settings
 from django import forms
@@ -15,6 +16,17 @@ class FirmaForm(forms.Form):
     metodo = forms.ChoiceField(choices=Firma.Metodo.choices)
     firma = forms.CharField(required=False)
     consentimiento = forms.BooleanField(required=True)
+    valores_campos = forms.CharField(required=False)
+
+    def clean_valores_campos(self):
+        raw = self.cleaned_data.get("valores_campos", "") or "{}"
+        try:
+            values = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            raise forms.ValidationError("Los valores de los campos no son válidos.")
+        if not isinstance(values, dict):
+            raise forms.ValidationError("Los valores de los campos no son válidos.")
+        return values
 
     def clean_firma(self):
         data_url = self.cleaned_data.get("firma", "")

@@ -30,6 +30,17 @@ from .services import (
 )
 
 
+TIPOS_CAMPO_API = {
+    "signature": CampoFirma.Tipo.FIRMA,
+    "name": CampoFirma.Tipo.NOMBRE,
+    "date": CampoFirma.Tipo.FECHA,
+    "text": CampoFirma.Tipo.TEXTO,
+    "initials": CampoFirma.Tipo.INICIALES,
+    "checkbox": CampoFirma.Tipo.CHECKBOX,
+}
+TIPOS_CAMPO_FRONTEND = {value: key for key, value in TIPOS_CAMPO_API.items()}
+
+
 def _es_presidente_activo(usuario):
     return (
         usuario.cargo_id == Cargo.Codigo.PRESIDENTE
@@ -109,7 +120,7 @@ def _campo_serializado(campo):
     usuario = campo.destinatario.usuario
     return {
         "id": campo.pk,
-        "type": "signature",
+        "type": TIPOS_CAMPO_FRONTEND[campo.tipo],
         "page": campo.pagina,
         "x": float(campo.x),
         "y": float(campo.y),
@@ -117,6 +128,8 @@ def _campo_serializado(campo):
         "height": float(campo.alto),
         "recipient_id": campo.destinatario_id,
         "recipient_name": str(usuario),
+        "required": campo.requerido,
+        "label": campo.etiqueta,
     }
 
 
@@ -195,7 +208,11 @@ def send_review_view(request, pk):
         .order_by("usuario__first_name", "usuario__last_name", "usuario__email")
     )
     destinatarios_con_campo = sum(
-        bool(destinatario.campos_firma.all()) for destinatario in destinatarios
+        any(
+            campo.tipo == CampoFirma.Tipo.FIRMA
+            for campo in destinatario.campos_firma.all()
+        )
+        for destinatario in destinatarios
     )
     campos_asignados = sum(
         len(destinatario.campos_firma.all()) for destinatario in destinatarios
@@ -254,7 +271,10 @@ def send_document_view(request, pk):
             raise PermissionDenied
 
         destinatarios_con_campo = set(
-            CampoFirma.objects.filter(destinatario__envio=envio).values_list(
+            CampoFirma.objects.filter(
+                destinatario__envio=envio,
+                tipo=CampoFirma.Tipo.FIRMA,
+            ).values_list(
                 "destinatario_id", flat=True
             )
         )
@@ -549,8 +569,11 @@ def signature_fields_view(request, pk):
     campos_validados = []
 
     for datos in datos_campos:
-        if not isinstance(datos, dict) or datos.get("type", "signature") != "signature":
-            return JsonResponse({"error": "Sólo se admiten campos de firma."}, status=400)
+        if not isinstance(datos, dict):
+            return JsonResponse({"error": "El campo no es válido."}, status=400)
+        tipo = TIPOS_CAMPO_API.get(datos.get("type"))
+        if tipo is None:
+            return JsonResponse({"error": "El tipo de campo no es válido."}, status=400)
 
         campo_id = datos.get("id")
         if campo_id is not None:
@@ -563,6 +586,14 @@ def signature_fields_view(request, pk):
         destinatario_id = datos.get("recipient_id")
         if isinstance(destinatario_id, bool) or not isinstance(destinatario_id, int) or destinatario_id not in destinatarios:
             return JsonResponse({"error": "El destinatario no pertenece al documento."}, status=400)
+        requerido = datos.get("required", True)
+        if not isinstance(requerido, bool):
+            return JsonResponse({"error": "La propiedad requerido no es válida."}, status=400)
+        if tipo == CampoFirma.Tipo.FIRMA and not requerido:
+            return JsonResponse({"error": "Los campos de firma son obligatorios."}, status=400)
+        etiqueta = datos.get("label", "") if tipo == CampoFirma.Tipo.TEXTO else ""
+        if not isinstance(etiqueta, str) or len(etiqueta.strip()) > 60:
+            return JsonResponse({"error": "La etiqueta del campo no es válida."}, status=400)
         pagina = datos.get("page")
         if isinstance(pagina, bool) or not isinstance(pagina, int) or not 1 <= pagina <= total_paginas:
             return JsonResponse({"error": "La página indicada no es válida."}, status=400)
@@ -586,6 +617,11 @@ def signature_fields_view(request, pk):
 
         campo = campos_existentes.get(campo_id, CampoFirma())
         campo.destinatario = destinatarios[destinatario_id]
+        campo.tipo = tipo
+        campo.requerido = requerido
+        campo.etiqueta = etiqueta.strip()
+        campo.valor = None
+        campo.fecha_completado = None
         campo.pagina = pagina
         campo.x = valores["x"]
         campo.y = valores["y"]

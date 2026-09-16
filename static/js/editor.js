@@ -133,7 +133,7 @@ function recipientsWithoutSignatureField() {
 function updateBackendFieldTools() {
     if (!backendEditor || !loadedPdf) return;
     fieldTools.forEach((tool) => {
-        tool.disabled = tool.dataset.fieldType !== "signature" || backendRecipients.length === 0;
+        tool.disabled = backendRecipients.length === 0;
     });
 }
 
@@ -288,8 +288,10 @@ function renderFieldsForLayer(layer) {
 
 function createDocumentField(type, layer, clientX, clientY) {
     const config = FIELD_TYPES[type];
-    const fieldRecipient = backendEditor && type === "signature"
-        ? recipientsWithoutSignatureField()[0] || recipientById(propertyRecipient?.value) || backendRecipients[0]
+    const fieldRecipient = backendEditor
+        ? (type === "signature" ? recipientsWithoutSignatureField()[0] : null)
+            || recipientById(propertyRecipient?.value)
+            || backendRecipients[0]
         : recipient;
     if (!fieldRecipient) {
         showEditorFeedback("No hay destinatarios disponibles para asignar el campo.");
@@ -317,7 +319,8 @@ function createDocumentField(type, layer, clientX, clientY) {
 
     layer.append(fieldElement);
     setFieldPixels(fieldElement, left, top, width, height);
-    documentFields.push(getNormalizedFieldData(fieldElement));
+    documentFields.push(fieldData);
+    updateFieldState(fieldElement);
     setSelectedField(fieldElement);
     fieldElement.focus({ preventScroll: true });
     hideEditorFeedback();
@@ -538,6 +541,7 @@ function updatePropertiesPanel() {
 
     propertyType.textContent = FIELD_TYPES[fieldData.type].label;
     propertyRequired.checked = fieldData.required;
+    propertyRequired.disabled = fieldData.type === "signature";
     if (backendEditor && propertyRecipient) propertyRecipient.value = String(fieldData.recipient_id);
     textProperty.hidden = fieldData.type !== "text";
     propertyLabel.value = fieldData.type === "text" ? fieldData.label : "";
@@ -626,6 +630,8 @@ function storeDocumentForReview() {
                     width: field.width,
                     height: field.height,
                     recipient_id: field.recipient_id,
+                    required: field.required,
+                    label: field.type === "text" ? field.label : "",
                 })),
             }),
         }).then(async (response) => {
@@ -636,7 +642,7 @@ function storeDocumentForReview() {
                 const fieldElement = renderedFields.find((element) => element.dataset.id === fieldId);
                 if (fieldElement && result.fields[index]) fieldElement.dataset.id = String(result.fields[index].id);
             });
-            documentFields.splice(0, documentFields.length, ...result.fields.map((field) => ({ ...field, required: true })));
+            documentFields.splice(0, documentFields.length, ...result.fields);
         });
     }
 
@@ -733,7 +739,7 @@ async function prepareEditor() {
             documentFields.splice(
                 0,
                 documentFields.length,
-                ...storedFields.fields.map((field) => ({ ...field, required: true })),
+                ...storedFields.fields,
             );
             updateRecipientPresentation();
             window.pdfjsLib.GlobalWorkerOptions.workerSrc =

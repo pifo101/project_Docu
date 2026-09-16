@@ -1,13 +1,15 @@
 import hashlib
+import threading
 from io import BytesIO
 
 from django.core.files.base import ContentFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.urls import reverse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 from auditoria.models import EventoAuditoria
@@ -18,6 +20,7 @@ from .models import (
     Documento,
     DocumentoResultado,
     EnvioDocumento,
+    CampoFirma,
 )
 
 
@@ -33,6 +36,7 @@ RECIPIENT_STATUS_PRESENTATION = {
     DestinatarioDocumento.Estado.FIRMADO: ("Firmado", "complete", "✓"),
 }
 FORMATOS_FIRMA_SOPORTADOS = {"image/png", "image/jpeg"}
+_SQLITE_RESULT_LOCK = threading.Lock()
 
 
 class ResultadoPDFError(Exception):
@@ -79,10 +83,11 @@ def _cargar_destinatarios_validados(envio, page_count):
     ):
         raise ResultadoPDFError("El envío todavía tiene firmas pendientes.")
 
-    firmas_por_pagina = {}
+    campos_por_pagina = {}
     for destinatario in destinatarios:
         campos = list(destinatario.campos_firma.all())
-        if not campos:
+        campos_firma = [campo for campo in campos if campo.tipo == CampoFirma.Tipo.FIRMA]
+        if not campos_firma:
             raise ResultadoPDFError("Cada destinatario debe tener al menos un campo de firma.")
         try:
             firma = destinatario.firma
@@ -92,12 +97,44 @@ def _cargar_destinatarios_validados(envio, page_count):
             raise ResultadoPDFError("Una firma utiliza un formato no soportado.")
         for campo in campos:
             if not 1 <= campo.pagina <= page_count:
-                raise ResultadoPDFError("Un campo de firma apunta a una página inexistente.")
-            firmas_por_pagina.setdefault(campo.pagina - 1, []).append((campo, firma))
-    return firmas_por_pagina
+                raise ResultadoPDFError("Un campo apunta a una página inexistente.")
+            if campo.tipo != CampoFirma.Tipo.FIRMA and campo.valor is None:
+                raise ResultadoPDFError("Un campo del documento no tiene un valor completado.")
+            campos_por_pagina.setdefault(campo.pagina - 1, []).append(
+                (campo, firma if campo.tipo == CampoFirma.Tipo.FIRMA else None)
+            )
+    return campos_por_pagina
 
 
-def _crear_overlay(page, firmas):
+def _dibujar_texto(overlay, valor, rectangulo):
+    x, y, width, height = rectangulo
+    font_size = max(6, min(12, height * 0.55))
+    original_text = str(valor).replace("\r", " ").replace("\n", " ").strip()
+    text = original_text
+    while text and stringWidth(text, "Helvetica", font_size) > width - 4:
+        text = text[:-1]
+    if text != original_text and len(text) > 3:
+        text = text[:-3] + "..."
+    overlay.setFont("Helvetica", font_size)
+    overlay.setFillColorRGB(0.031, 0.141, 0.435)
+    overlay.drawString(x + 2, y + max(1, (height - font_size) / 2), text)
+
+
+def _dibujar_checkbox(overlay, marcado, rectangulo):
+    x, y, width, height = rectangulo
+    size = min(width, height) * 0.62
+    left = x + (width - size) / 2
+    bottom = y + (height - size) / 2
+    overlay.setLineWidth(max(1, size * 0.07))
+    overlay.setStrokeColorRGB(0.031, 0.141, 0.435)
+    overlay.rect(left, bottom, size, size, stroke=1, fill=0)
+    if marcado:
+        overlay.setLineWidth(max(1.3, size * 0.1))
+        overlay.line(left + size * 0.2, bottom + size * 0.5, left + size * 0.43, bottom + size * 0.25)
+        overlay.line(left + size * 0.43, bottom + size * 0.25, left + size * 0.82, bottom + size * 0.78)
+
+
+def _crear_overlay(page, campos):
     box = page.cropbox
     page_width = float(page.mediabox.width)
     page_height = float(page.mediabox.height)
@@ -107,27 +144,32 @@ def _crear_overlay(page, firmas):
     bottom = float(box.bottom)
     output = BytesIO()
     overlay = canvas.Canvas(output, pagesize=(page_width, page_height), invariant=1)
-    for campo, firma in firmas:
-        try:
-            image = ImageReader(BytesIO(bytes(firma.imagen)))
-            image_width, image_height = image.getSize()
-        except Exception as error:
-            raise ResultadoPDFError("No se pudo leer una imagen de firma.") from error
+    for campo, firma in campos:
         rectangulo = calcular_rectangulo_pdf(
             campo, crop_width, crop_height, left=left, bottom=bottom
         )
-        x, y, width, height = calcular_colocacion_firma(
-            rectangulo, image_width, image_height
-        )
-        overlay.drawImage(
-            image,
-            x,
-            y,
-            width=width,
-            height=height,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
+        if campo.tipo == CampoFirma.Tipo.FIRMA:
+            try:
+                image = ImageReader(BytesIO(bytes(firma.imagen)))
+                image_width, image_height = image.getSize()
+            except Exception as error:
+                raise ResultadoPDFError("No se pudo leer una imagen de firma.") from error
+            x, y, width, height = calcular_colocacion_firma(
+                rectangulo, image_width, image_height
+            )
+            overlay.drawImage(
+                image,
+                x,
+                y,
+                width=width,
+                height=height,
+                preserveAspectRatio=True,
+                mask="auto",
+            )
+        elif campo.tipo == CampoFirma.Tipo.CHECKBOX:
+            _dibujar_checkbox(overlay, campo.valor == "true", rectangulo)
+        else:
+            _dibujar_texto(overlay, campo.valor, rectangulo)
     overlay.save()
     output.seek(0)
     return PdfReader(output).pages[0]
@@ -147,14 +189,14 @@ def construir_pdf_resultado(envio):
             page_count = len(reader.pages)
             if page_count < 1:
                 raise ResultadoPDFError("El PDF original no contiene páginas.")
-            firmas_por_pagina = _cargar_destinatarios_validados(envio, page_count)
+            campos_por_pagina = _cargar_destinatarios_validados(envio, page_count)
             writer = PdfWriter()
             for index, page in enumerate(reader.pages):
                 if page.rotation:
                     page.transfer_rotation_to_content()
-                firmas = firmas_por_pagina.get(index)
-                if firmas:
-                    page.merge_page(_crear_overlay(page, firmas), over=True)
+                campos = campos_por_pagina.get(index)
+                if campos:
+                    page.merge_page(_crear_overlay(page, campos), over=True)
                 writer.add_page(page)
             output = BytesIO()
             writer.write(output)
@@ -167,7 +209,17 @@ def construir_pdf_resultado(envio):
         raise ResultadoPDFError("No se pudo generar el PDF resultante.") from error
 
 
-def generar_resultado_si_completo(envio_id, actor=None, request=None):
+def generar_resultado_si_completo(
+    envio_id, actor=None, request=None, _sqlite_lock_acquired=False
+):
+    if connection.vendor == "sqlite" and not _sqlite_lock_acquired:
+        with _SQLITE_RESULT_LOCK:
+            return generar_resultado_si_completo(
+                envio_id,
+                actor=actor,
+                request=request,
+                _sqlite_lock_acquired=True,
+            )
     saved_name = None
     storage = DocumentoResultado._meta.get_field("archivo").storage
     try:
