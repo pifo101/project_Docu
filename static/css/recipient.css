@@ -1,5 +1,5 @@
 .recipient-page { min-height: 100vh; background: #f4f6fb; }
-.recipient-page button, .recipient-page textarea { font: inherit; }
+.recipient-page button, .recipient-page input, .recipient-page textarea { font: inherit; }
 .recipient-shell { display: grid; min-height: 100vh; grid-template-rows: auto 1fr auto; }
 .recipient-header { display: flex; min-height: 70px; padding: 0 clamp(20px, 5vw, 70px); align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); background: white; }
 .recipient-header .brand, .signing-header .brand { color: var(--color-primary); }
@@ -67,6 +67,13 @@
 .recipient-field--checkbox { display: flex; width: 42%; left: 13%; top: 61%; align-items: center; gap: 7px; font-size: 8px; }
 .recipient-field--checkbox i { width: 15px; height: 15px; flex: 0 0 auto; border: 1px solid var(--color-primary); border-radius: 3px; background: white; }
 .recipient-field--signature { overflow: hidden; }
+.recipient-field--text { cursor: text; }
+.recipient-field--text input { width: 100%; min-width: 0; padding: 3px 5px; border: 1px solid #b8c6e8; border-radius: 4px; color: var(--color-dark-blue); background: white; font-size: 9px; outline: none; }
+.recipient-field--text input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(14,67,240,.14); }
+.recipient-field--checkbox { cursor: pointer; }
+.recipient-field--checkbox input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; accent-color: var(--color-primary); }
+.recipient-field--checkbox span { overflow: hidden; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.recipient-field--name, .recipient-field--date, .recipient-field--initials { cursor: default; }
 .recipient-field.field-complete { border-color: #12b76a; background: rgba(236,253,243,.97); }
 .recipient-field--checkbox.field-complete i { display: grid; place-items: center; color: white; background: #12b76a; }
 .recipient-field--checkbox.field-complete i::after { content: "✓"; font-size: 9px; }
@@ -118,7 +125,7 @@
 .completed-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .completed-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .completed-feedback { min-height: 17px; margin: 10px 0 0 !important; color: #175cd3 !important; font-size: 9px !important; }
-@media (max-width: 760px) { .signing-header { grid-template-columns: auto minmax(0,1fr) auto; padding: 0 14px; gap: 10px; } .signing-header .brand > span:last-child, .signing-progress { display: none; } .signing-document { justify-self: start; text-align: left; } .signing-main { display: block; } .signing-guide { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--color-border); } .signing-guide > .section-label, .signing-guide h1, .signing-guide > p, .signing-guide .recipient-secondary { display: none; } .signing-guide ol { grid-template-columns: repeat(4,1fr); margin: 0; gap: 5px; } .signing-guide li { min-height: 34px; padding: 0; justify-content: center; font-size: 0; } .recipient-viewer { padding: 18px 12px 35px; } .signing-footer { padding: 0 14px; } .signing-footer > span { display: none; } .signing-reject-mobile { display: inline-flex; margin-left: auto; } .consent-panel { right: 14px; bottom: 80px; } }
+@media (max-width: 760px) { .signing-header { grid-template-columns: auto minmax(0,1fr) auto; padding: 0 14px; gap: 10px; } .signing-header .brand > span:last-child, .signing-progress { display: none; } .signing-document { justify-self: start; text-align: left; } .signing-main { display: block; } .signing-guide { position: static; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--color-border); } .signing-guide > .section-label, .signing-guide h1, .signing-guide > p, .signing-guide .recipient-secondary { display: none; } .signing-guide ol { grid-template-columns: repeat(auto-fit,minmax(34px,1fr)); margin: 0; gap: 5px; } .signing-guide li { min-height: 34px; padding: 0; justify-content: center; font-size: 0; } .recipient-viewer { padding: 18px 12px 35px; } .signing-footer { padding: 0 14px; } .signing-footer > span { display: none; } .signing-reject-mobile { display: inline-flex; margin-left: auto; } .consent-panel { right: 14px; bottom: 80px; } }
 @media (max-width: 760px) { .signing-footer { justify-content: space-between; } .signing-footer .signing-reject-mobile { display: inline-flex; margin-left: 0; } }
 @media (max-width: 480px) { .secure-note { font-size: 0; } .request-content, .completed-content { padding: 24px 14px; } .request-card, .completed-card { padding: 28px 20px; border-radius: 18px; } .recipient-field { padding: 5px 6px; } .signature-dialog__header { padding: 20px 18px 15px; } .signature-tabs { padding: 12px 18px; gap: 7px; } .signature-tabs button { padding: 7px 6px; } .saved-signature-panel { padding: 16px 18px 20px; } .signature-canvas-wrap { margin: 16px 18px 0; } .signature-dialog__actions { display: grid; grid-template-columns: 1fr 1fr; padding: 15px 18px 20px; } .signature-dialog__actions .recipient-primary { grid-column: 1 / span 2; grid-row: 1; } .completed-document { grid-template-columns: auto minmax(0,1fr); } .completed-status { grid-column: 2; width: fit-content; } }
 @media (prefers-reduced-motion: reduce) { .signing-progress i { transition: none; } }

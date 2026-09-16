@@ -13,6 +13,7 @@
     const signatureError = document.querySelector("[data-signature-error]");
     const signatureInput = document.querySelector("[data-signature-input]");
     const signatureMethod = document.querySelector("[data-signature-method]");
+    const fieldValuesInput = document.querySelector("[data-field-values]");
     const signatureTabs = Array.from(document.querySelectorAll("[data-signature-tab]"));
     const nextHelp = document.querySelector("[data-next-help]");
     const nextFieldButton = document.querySelector("[data-next-field]");
@@ -61,7 +62,7 @@
     }
 
     function placeSignatureFields() {
-        fields.filter((field) => field.dataset.completable === "signature").forEach((field, index) => {
+        fields.forEach((field, index) => {
             const fieldData = signatureFieldsData[index];
             if (!fieldData) return;
             const targetPage = recipientPages?.querySelector(`[data-page="${fieldData.page}"]`);
@@ -179,7 +180,7 @@
             placeSignatureFields();
             focusAssignedPage();
             if (nextFieldButton && !readonly) nextFieldButton.disabled = false;
-            if (nextHelp && !readonly) nextHelp.textContent = "Elige una firma guardada o dibuja una nueva.";
+            if (nextHelp && !readonly) nextHelp.textContent = "Completa los campos resaltados del documento.";
         } catch (error) {
             console.warn("No se pudo mostrar el PDF.", error);
             if (demo) drawMockDocument();
@@ -202,19 +203,25 @@
         if (progressCount) progressCount.textContent = `${completed} de ${fields.length}`;
         if (progressBar) progressBar.style.width = `${fields.length ? (completed / fields.length) * 100 : 0}%`;
         fields.forEach((field) => {
-            const guide = document.querySelector(`[data-guide-step="${field.dataset.completable}"]`);
+            const guide = document.querySelector(`[data-guide-field-id="${field.dataset.fieldId}"]`);
             guide?.classList.toggle("field-complete", field.classList.contains("field-complete"));
         });
         if (consentPanel) consentPanel.hidden = completed !== fields.length;
         if (completed === fields.length) consentCheckbox?.focus({ preventScroll: true });
     }
 
-    function completeSimpleField(field) {
-        const type = field.dataset.completable;
-        if (type === "name") field.querySelector("[data-field-value]").textContent = "Nombre de demostración";
-        if (type === "date") field.querySelector("[data-field-value]").textContent = "Fecha de demostración";
-        field.classList.toggle("field-complete", type === "checkbox" ? !field.classList.contains("field-complete") : true);
-        updateProgress();
+    function updateFieldValues() {
+        if (!fieldValuesInput) return;
+        const values = {};
+        fields.forEach((field) => {
+            if (field.dataset.completable === "text") {
+                values[field.dataset.fieldId] = field.querySelector("input")?.value || "";
+            }
+            if (field.dataset.completable === "checkbox") {
+                values[field.dataset.fieldId] = Boolean(field.querySelector("input")?.checked);
+            }
+        });
+        fieldValuesInput.value = JSON.stringify(values);
     }
 
     function configureSignatureCanvas() {
@@ -273,15 +280,37 @@
     });
 
     fields.forEach((field) => {
+        const type = field.dataset.completable;
+        const input = field.querySelector("input");
+        if (type === "text") {
+            input?.addEventListener("input", () => {
+                field.classList.toggle(
+                    "field-complete",
+                    field.dataset.required !== "true" || Boolean(input.value.trim()),
+                );
+                updateFieldValues();
+                updateProgress();
+            });
+            return;
+        }
+        if (type === "checkbox") {
+            input?.addEventListener("change", () => {
+                field.classList.toggle(
+                    "field-complete",
+                    field.dataset.required !== "true" || input.checked,
+                );
+                updateFieldValues();
+                updateProgress();
+            });
+            return;
+        }
         field.addEventListener("click", () => {
             if (readonly) return;
-            if (field.dataset.completable === "signature") {
+            if (type === "signature") {
                 signatureDialog?.showModal();
                 const selected = document.querySelector("[data-signature-tab].signature-tab--active");
                 if (selected?.dataset.signatureTab === "DIBUJADA") window.requestAnimationFrame(configureSignatureCanvas);
-                return;
             }
-            completeSimpleField(field);
         });
     });
 
@@ -289,7 +318,7 @@
         const nextField = fields.find((field) => !field.classList.contains("field-complete"));
         if (nextField) {
             nextField.scrollIntoView({ behavior: "smooth", block: "center" });
-            nextField.focus({ preventScroll: true });
+            (nextField.querySelector("input, button") || nextField).focus({ preventScroll: true });
         } else {
             consentPanel?.querySelector("input")?.focus();
         }
@@ -330,6 +359,7 @@
     });
 
     consentCheckbox?.addEventListener("change", () => { finalizeButton.disabled = !consentCheckbox.checked; });
+    consentPanel?.addEventListener("submit", updateFieldValues);
     const rejectDialog = document.querySelector("[data-reject-dialog]");
     document.querySelectorAll("[data-reject-open]").forEach((button) => button.addEventListener("click", () => rejectDialog?.showModal()));
     document.querySelector("[data-reject-close]")?.addEventListener("click", () => rejectDialog?.close());
@@ -371,5 +401,6 @@
 
     renderRecipientDocument();
     window.addEventListener("resize", scheduleRecipientResize);
+    updateFieldValues();
     updateProgress();
 })();

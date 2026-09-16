@@ -3,7 +3,7 @@
 
 {% block title %}Editor de documento | ADICLA Sign{% endblock %}
 {% block body_class %}editor-page{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}?v=interactive-fields-1">{% endblock %}
 
 {% block content %}
 <div class="editor-shell"{% if documento %} data-editor-backend data-pdf-url="{% url 'documentos:view_document' documento.pk %}" data-fields-url="{% url 'documentos:signature_fields' documento.pk %}" data-csrf-token="{{ csrf_token }}"{% endif %}>
@@ -42,27 +42,27 @@
                 <button class="field-tool field-tool--active" type="button" data-field-type="name" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3-7 8-7s8 3 8 7"/></svg></span>
                     Nombre
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
                 <button class="field-tool field-tool--active" type="button" data-field-type="date" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 2v4M16 2v4M5 9h14M9 13h2M13 13h2M9 16h2"/></svg></span>
                     Fecha
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
                 <button class="field-tool field-tool--active" type="button" data-field-type="text" disabled>
                     <span class="field-tool__letter" aria-hidden="true">T</span>
                     Texto
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
                 <button class="field-tool field-tool--active" type="button" data-field-type="initials" disabled>
                     <span class="field-tool__letter" aria-hidden="true">AB</span>
                     Iniciales
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
                 <button class="field-tool field-tool--active" type="button" data-field-type="checkbox" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 12l3 3 5-6"/></svg></span>
                     Checkbox
-                    <small>Próximamente</small>
+                    <small>Arrastrar</small>
                 </button>
             </div>
 
@@ -76,7 +76,7 @@
                     </div>
                     <label class="property-recipient"><span>Destinatario</span><select data-property-recipient{% if not documento %} hidden{% endif %}>{% for destinatario in destinatarios %}<option value="{{ destinatario.pk }}">{{ destinatario.usuario }}{% if destinatario.usuario_id == request.user.id %} (Presidente){% endif %}</option>{% endfor %}</select><strong data-property-recipient-label{% if documento %} hidden{% endif %}>Destinatarios seleccionados</strong></label>
                     <label class="property-switch">
-                        <input type="checkbox" data-property-required{% if documento %} checked disabled{% endif %}>
+                        <input type="checkbox" data-property-required checked>
                         <span aria-hidden="true"></span>
                         Campo obligatorio
                     </label>
@@ -117,5 +117,5 @@
 {% block extra_js %}
 {% if documento %}{{ destinatarios_editor|json_script:"editor-recipients" }}{% endif %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
-<script src="{% static 'js/editor.js' %}" defer></script>
+<script src="{% static 'js/editor.js' %}?v=interactive-fields-1" defer></script>
 {% endblock %}

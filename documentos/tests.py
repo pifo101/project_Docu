@@ -1431,6 +1431,7 @@ class EditorPageTests(TestCase):
         self.assertContains(response, "data-editor-continue")
         self.assertContains(response, f'data-review-url="{reverse("documentos:review")}"')
         self.assertContains(response, "pdf.min.js")
+        self.assertNotContains(response, "Próximamente")
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -1572,6 +1573,46 @@ class CampoFirmaTests(TestCase):
         self.assertEqual(len(recuperados), 1)
         self.assertEqual(recuperados[0]["recipient_id"], self.destinatario.pk)
         self.assertEqual(recuperados[0]["page"], 2)
+
+    def test_guarda_y_recupera_todos_los_tipos_de_campo(self):
+        tipos = ("signature", "name", "date", "text", "initials", "checkbox")
+        datos = [
+            self.datos_campo(
+                type=tipo,
+                page=1 if index < 3 else 2,
+                x=0.05 + (index % 3) * 0.3,
+                y=0.1 + (index // 3) * 0.3,
+                width=0.2,
+                height=0.08,
+                required=tipo != "checkbox",
+                label="Observaciones" if tipo == "text" else "",
+            )
+            for index, tipo in enumerate(tipos)
+        ]
+
+        response = self.guardar(datos)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CampoFirma.objects.count(), len(tipos))
+        self.assertEqual(
+            set(CampoFirma.objects.values_list("tipo", flat=True)),
+            set(CampoFirma.Tipo.values),
+        )
+        texto = CampoFirma.objects.get(tipo=CampoFirma.Tipo.TEXTO)
+        checkbox = CampoFirma.objects.get(tipo=CampoFirma.Tipo.CHECKBOX)
+        self.assertEqual(texto.etiqueta, "Observaciones")
+        self.assertTrue(texto.requerido)
+        self.assertFalse(checkbox.requerido)
+        recuperados = self.client.get(self.api_url).json()["fields"]
+        self.assertEqual({campo["type"] for campo in recuperados}, set(tipos))
+        self.assertEqual({campo["page"] for campo in recuperados}, {1, 2})
+        self.assertTrue(all(campo["width"] == 0.2 for campo in recuperados))
+
+    def test_rechaza_tipo_de_campo_desconocido(self):
+        response = self.guardar([self.datos_campo(type="coordenadas")])
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(CampoFirma.objects.exists())
 
     def test_campo_existente_se_actualiza_sin_duplicarse(self):
         campo_id = self.guardar([self.datos_campo()]).json()["fields"][0]["id"]
@@ -1726,6 +1767,23 @@ class CampoFirmaTests(TestCase):
         self.assertEqual(envio.estado, EnvioDocumento.Estado.PREPARACION)
         self.assertEqual(self.destinatario.estado, DestinatarioDocumento.Estado.BORRADOR)
         self.assertEqual(segundo.estado, DestinatarioDocumento.Estado.BORRADOR)
+
+    def test_campo_no_firma_no_sustituye_firma_requerida_para_enviar(self):
+        datos = self.datos_para_todos()
+        datos[0]["type"] = "text"
+        datos[0]["label"] = "Comentario"
+        self.guardar(datos)
+
+        response = self.client.post(
+            reverse("documentos:send", args=[self.documento.pk]),
+            follow=True,
+        )
+
+        self.assertContains(response, str(self.destinatario.usuario))
+        self.assertEqual(
+            EnvioDocumento.objects.get(documento=self.documento).estado,
+            EnvioDocumento.Estado.PREPARACION,
+        )
 
     def test_campos_no_se_modifican_despues_del_envio(self):
         campo_id = self.guardar(self.datos_para_todos()).json()["fields"][0]["id"]
@@ -2394,6 +2452,43 @@ class DocumentoResultadoTests(TestCase):
 
         # ReportLab reutiliza un solo XObject cuando los bytes coinciden, pero lo dibuja dos veces.
         self.assertEqual(self._drawn_image_count(reader.pages[0]), 2)
+
+    def test_pdf_incorpora_textos_y_checkboxes_en_paginas_de_distinto_tamano(self):
+        envio, _ = self._crear_envio(sizes=((612, 792), (595, 842)))
+        destinatario = self._agregar_firmante(envio, self.usuario_a, pagina=1)
+        campos = (
+            (CampoFirma.Tipo.NOMBRE, "Ana Firmante", 1, "0.10"),
+            (CampoFirma.Tipo.FECHA, "16/09/2026", 1, "0.25"),
+            (CampoFirma.Tipo.TEXTO, "Aprobado", 2, "0.10"),
+            (CampoFirma.Tipo.INICIALES, "AF", 2, "0.25"),
+            (CampoFirma.Tipo.CHECKBOX, "true", 2, "0.40"),
+            (CampoFirma.Tipo.CHECKBOX, "false", 2, "0.55"),
+        )
+        for tipo, valor, pagina, y in campos:
+            CampoFirma.objects.create(
+                destinatario=destinatario,
+                tipo=tipo,
+                pagina=pagina,
+                x=Decimal("0.10"),
+                y=Decimal(y),
+                ancho=Decimal("0.35"),
+                alto=Decimal("0.08"),
+                valor=valor,
+                fecha_completado=timezone.now(),
+            )
+
+        resultado = generar_resultado_si_completo(envio.pk)
+        reader = PdfReader(BytesIO(self._resultado_bytes(resultado)))
+
+        self.assertEqual(len(reader.pages), 2)
+        self.assertIn("Ana Firmante", reader.pages[0].extract_text())
+        self.assertIn("16/09/2026", reader.pages[0].extract_text())
+        self.assertIn("Aprobado", reader.pages[1].extract_text())
+        self.assertIn("AF", reader.pages[1].extract_text())
+        rectangle_count = sum(
+            1 for _, operator in reader.pages[1].get_contents().operations if operator == b"re"
+        )
+        self.assertGreaterEqual(rectangle_count, 2)
 
     def test_convierte_x_y_ancho_alto_con_origen_superior_izquierdo(self):
         envio, _ = self._crear_envio()
