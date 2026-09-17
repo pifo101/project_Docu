@@ -114,8 +114,27 @@
     </main>
     <div class="editor-mobile-actions">
         <button type="button" data-properties-toggle aria-expanded="false" aria-controls="editor-field-properties" disabled>Propiedades</button>
-        <button class="editor-fab" type="button" data-fields-toggle aria-expanded="false" aria-controls="editor-field-list" disabled>Añadir campo</button>
+        <button class="editor-tools-open" type="button" data-tools-open aria-expanded="false" aria-controls="editor-tools-drawer" disabled>Herramientas</button>
     </div>
+    <div class="editor-drawer-backdrop" data-drawer-backdrop hidden></div>
+    <aside class="editor-tools-drawer" id="editor-tools-drawer" data-tools-drawer aria-labelledby="tools-drawer-title" hidden>
+        <div class="editor-tools-drawer__header">
+            <div>
+                <span>Paso 3</span>
+                <h2 id="tools-drawer-title">Herramientas</h2>
+                <p>Elige un campo y luego toca el PDF.</p>
+            </div>
+            <button type="button" data-drawer-close aria-label="Cerrar herramientas">Cerrar</button>
+        </div>
+        <div class="editor-tools-drawer__list" role="group" aria-label="Campos disponibles">
+            <button type="button" data-drawer-field-type="signature" disabled>Firma</button>
+            <button type="button" data-drawer-field-type="name" disabled>Nombre</button>
+            <button type="button" data-drawer-field-type="date" disabled>Fecha</button>
+            <button type="button" data-drawer-field-type="text" disabled>Texto</button>
+            <button type="button" data-drawer-field-type="initials" disabled>Iniciales</button>
+            <button type="button" data-drawer-field-type="checkbox" disabled>Checkbox</button>
+        </div>
+    </aside>
     <div class="editor-placement" data-placement hidden>
         <span data-placement-message role="status" aria-live="polite"></span>
         <button type="button" data-placement-cancel>Cancelar</button>

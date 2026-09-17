@@ -24,10 +24,13 @@ const recipientInitialsElement = document.querySelector("[data-recipient-initial
 const propertyRecipient = document.querySelector("[data-property-recipient]");
 const propertyRecipientLabel = document.querySelector("[data-property-recipient-label]");
 const mobileEditor = window.matchMedia("(max-width: 600px)");
-const fieldsToggle = document.querySelector("[data-fields-toggle]");
+const toolsOpen = document.querySelector("[data-tools-open]");
 const propertiesToggle = document.querySelector("[data-properties-toggle]");
-const fieldList = document.getElementById("editor-field-list");
 const propertiesPanel = document.getElementById("editor-field-properties");
+const toolsDrawer = document.querySelector("[data-tools-drawer]");
+const drawerBackdrop = document.querySelector("[data-drawer-backdrop]");
+const drawerClose = document.querySelector("[data-drawer-close]");
+const drawerFieldButtons = [...document.querySelectorAll("[data-drawer-field-type]")];
 const placement = document.querySelector("[data-placement]");
 let pendingFieldType = null;
 let placementTap = null;
@@ -143,6 +146,7 @@ function updateBackendFieldTools() {
     fieldTools.forEach((tool) => {
         tool.disabled = backendRecipients.length === 0;
     });
+    syncDrawerState();
 }
 
 function sameFieldId(field, fieldId) {
@@ -219,6 +223,7 @@ function normalizeTextLabel(fieldElement) {
 function setSelectedField(fieldElement) {
     if (fieldElement && mobileEditor.matches) {
         setPendingFieldType(null);
+        closeToolsDrawer(false);
         setMobilePanel(null);
     }
     if (selectedField !== fieldElement) normalizeTextLabel(selectedField);
@@ -233,12 +238,42 @@ function setSelectedField(fieldElement) {
 }
 
 function setMobilePanel(panel, restoreFocus = false) {
-    const previous = fieldsToggle.getAttribute("aria-expanded") === "true" ? fieldsToggle : propertiesToggle;
-    fieldList.classList.toggle("is-open", panel === "fields");
-    propertiesPanel.classList.toggle("is-open", panel === "properties");
-    fieldsToggle.setAttribute("aria-expanded", String(panel === "fields"));
-    propertiesToggle.setAttribute("aria-expanded", String(panel === "properties"));
-    if (restoreFocus) previous.focus({ preventScroll: true });
+    const isPropertiesOpen = panel === "properties";
+    propertiesPanel.classList.toggle("is-open", isPropertiesOpen);
+    propertiesToggle.setAttribute("aria-expanded", String(isPropertiesOpen));
+    if (restoreFocus) propertiesToggle.focus({ preventScroll: true });
+}
+
+function isToolsDrawerOpen() {
+    return Boolean(toolsDrawer) && !toolsDrawer.hidden;
+}
+
+function openToolsDrawer() {
+    if (!toolsDrawer || toolsOpen.disabled) return;
+    setPendingFieldType(null);
+    setMobilePanel(null);
+    toolsDrawer.hidden = false;
+    drawerBackdrop.hidden = false;
+    toolsOpen.setAttribute("aria-expanded", "true");
+    drawerClose.focus({ preventScroll: true });
+}
+
+function closeToolsDrawer(restoreFocus = false) {
+    if (!toolsDrawer || toolsDrawer.hidden) return;
+    toolsDrawer.hidden = true;
+    drawerBackdrop.hidden = true;
+    toolsOpen.setAttribute("aria-expanded", "false");
+    if (restoreFocus) toolsOpen.focus({ preventScroll: true });
+}
+
+function syncDrawerState() {
+    if (!toolsOpen) return;
+    const anyEnabled = fieldTools.some((tool) => !tool.disabled);
+    toolsOpen.disabled = !anyEnabled || !loadedPdf || pdfDocumentElement.hidden;
+    drawerFieldButtons.forEach((button) => {
+        const tool = fieldTools.find((item) => item.dataset.fieldType === button.dataset.drawerFieldType);
+        button.disabled = !tool || tool.disabled;
+    });
 }
 
 function setPendingFieldType(type) {
@@ -701,9 +736,11 @@ async function renderPages() {
 
     cancelActiveInteraction();
     setPendingFieldType(null);
-    fieldsToggle.disabled = true;
+    closeToolsDrawer(false);
+    if (toolsOpen) toolsOpen.disabled = true;
     setSelectedField(null);
     fieldTools.forEach((tool) => { tool.disabled = true; });
+    syncDrawerState();
     continueButton.disabled = true;
     if (saveButton) saveButton.disabled = true;
     const currentVersion = ++renderVersion;
@@ -757,7 +794,7 @@ async function renderPages() {
     else fieldTools.forEach((tool) => { tool.disabled = false; });
     continueButton.disabled = false;
     if (saveButton) saveButton.disabled = false;
-    fieldsToggle.disabled = fieldTools.every((tool) => tool.disabled);
+    syncDrawerState();
 }
 
 async function prepareEditor() {
@@ -831,14 +868,6 @@ function scheduleResize() {
 fieldTools.forEach((tool) => {
     tool.addEventListener("pointerdown", startToolDrag);
     tool.addEventListener("click", (event) => {
-        if (mobileEditor.matches && event.detail !== 0) {
-            if (tool.disabled || !loadedPdf || pdfDocumentElement.hidden) return;
-            setSelectedField(null);
-            setPendingFieldType(tool.dataset.fieldType);
-            setMobilePanel(null);
-            fieldsToggle.focus({ preventScroll: true });
-            return;
-        }
         if (event.detail !== 0 || tool.disabled || !loadedPdf) return;
         const layer = document.querySelector('.field-layer[data-page="1"]');
         if (!layer) return;
@@ -851,21 +880,33 @@ document.addEventListener("pointerup", finishInteraction);
 document.addEventListener("pointercancel", finishInteraction);
 document.addEventListener("pointerdown", (event) => {
     if (mobileEditor.matches) {
-        if (!event.target.closest(".field-list, .field-properties, .editor-mobile-actions")) setMobilePanel(null);
+        if (!event.target.closest("[data-tools-drawer], .field-properties, .editor-mobile-actions")) setMobilePanel(null);
+        if (!event.target.closest("[data-tools-drawer]") && !event.target.closest("[data-tools-open]")) closeToolsDrawer(false);
         if (event.target.closest(".editor-mobile-actions, .editor-placement, [data-editor-save]")) return;
     }
     const selectionControls = mobileEditor.matches
-        ? ".document-field, .field-properties, .field-list" : ".document-field, .field-properties";
+        ? ".document-field, .field-properties" : ".document-field, .field-properties";
     if (!event.target.closest(selectionControls)) setSelectedField(null);
 });
-fieldsToggle.addEventListener("click", () => {
-    setPendingFieldType(null);
-    const open = fieldsToggle.getAttribute("aria-expanded") !== "true";
-    setMobilePanel(open ? "fields" : null);
-    if (open) fieldTools.find((tool) => !tool.disabled)?.focus({ preventScroll: true });
+toolsOpen.addEventListener("click", () => {
+    if (isToolsDrawerOpen()) closeToolsDrawer(false);
+    else openToolsDrawer();
 });
+drawerFieldButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        if (button.disabled || !loadedPdf || pdfDocumentElement.hidden) return;
+        const type = button.dataset.drawerFieldType;
+        if (!FIELD_TYPES[type]) return;
+        setSelectedField(null);
+        setPendingFieldType(type);
+        closeToolsDrawer(false);
+    });
+});
+drawerClose.addEventListener("click", () => closeToolsDrawer(true));
+drawerBackdrop.addEventListener("click", () => closeToolsDrawer(false));
 propertiesToggle.addEventListener("click", () => {
     setPendingFieldType(null);
+    closeToolsDrawer(false);
     const open = propertiesToggle.getAttribute("aria-expanded") !== "true";
     setMobilePanel(open ? "properties" : null);
     if (open) propertiesPanel.querySelector("[data-properties-close]").focus({ preventScroll: true });
@@ -873,7 +914,7 @@ propertiesToggle.addEventListener("click", () => {
 document.querySelector("[data-properties-close]").addEventListener("click", () => setMobilePanel(null, true));
 document.querySelector("[data-placement-cancel]").addEventListener("click", () => {
     setPendingFieldType(null);
-    fieldsToggle.focus({ preventScroll: true });
+    if (mobileEditor.matches) toolsOpen.focus({ preventScroll: true });
 });
 pdfDocumentElement.addEventListener("pointerdown", (event) => {
     if (!mobileEditor.matches || !pendingFieldType || !event.isPrimary || event.button !== 0
@@ -900,18 +941,20 @@ document.addEventListener("pointercancel", () => { placementTap = null; });
 window.addEventListener("scroll", () => { placementTap = null; }, { capture: true, passive: true });
 mobileEditor.addEventListener("change", () => {
     setPendingFieldType(null);
+    closeToolsDrawer(false);
     setMobilePanel(null);
     cancelActiveInteraction();
     scheduleResize();
 });
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && mobileEditor.matches) {
-        const hadPanel = fieldsToggle.getAttribute("aria-expanded") === "true"
-            || propertiesToggle.getAttribute("aria-expanded") === "true";
+        const hadDrawer = isToolsDrawerOpen();
+        const hadPanel = propertiesToggle.getAttribute("aria-expanded") === "true";
         const hadPending = Boolean(pendingFieldType);
         setPendingFieldType(null);
+        closeToolsDrawer(false);
         setMobilePanel(null, hadPanel);
-        if (hadPending) fieldsToggle.focus({ preventScroll: true });
+        if (hadPending || hadDrawer) toolsOpen.focus({ preventScroll: true });
     }
     const target = event.target;
     const isEditing = target instanceof HTMLElement

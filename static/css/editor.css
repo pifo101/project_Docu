@@ -871,8 +871,17 @@
 
 .editor-mobile-actions,
 .editor-mobile-close,
-.editor-placement {
+.editor-placement,
+.editor-tools-drawer,
+.editor-drawer-backdrop {
     display: none;
+}
+
+@media (min-width: 601px) {
+    .editor-tools-drawer,
+    .editor-drawer-backdrop {
+        display: none !important;
+    }
 }
 
 @media (max-width: 600px) {
@@ -940,7 +949,12 @@
         font-size: 17px;
     }
 
-    .field-list,
+    /* Paleta de escritorio oculta en móvil: no ocupa espacio superior.
+       Las 6 herramientas siguen existiendo en el DOM y se eligen vía drawer. */
+    .field-list {
+        display: none !important;
+    }
+
     .field-properties {
         position: fixed;
         z-index: 30;
@@ -958,11 +972,6 @@
         border-radius: 16px;
         background: white;
         box-shadow: 0 8px 32px rgba(16, 24, 40, 0.2);
-    }
-
-    .field-list.is-open {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(68px, 1fr));
     }
 
     .field-properties.is-open {
@@ -1000,16 +1009,122 @@
         pointer-events: auto;
     }
 
-    .editor-mobile-actions .editor-fab {
+    .editor-mobile-actions .editor-tools-open {
         min-height: 48px;
-        border-radius: 24px;
+        border-radius: 12px;
         color: white;
         background: var(--color-primary);
         box-shadow: 0 5px 20px rgba(8, 36, 111, 0.25);
+        font-weight: 700;
     }
 
     .editor-mobile-actions button:disabled {
         opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    /* Drawer lateral derecho: se superpone al PDF, debajo del header
+       (top 62px) para no tapar "Continuar". Solo móvil. */
+    .editor-drawer-backdrop:not([hidden]) {
+        display: block;
+        position: fixed;
+        z-index: 38;
+        inset: 0;
+        background: rgba(8, 20, 52, 0.35);
+    }
+
+    .editor-tools-drawer:not([hidden]) {
+        display: flex;
+        position: fixed;
+        z-index: 39;
+        top: 62px;
+        right: 0;
+        bottom: 0;
+        width: min(300px, 85vw);
+        flex-direction: column;
+        overflow: hidden;
+        border-left: 1px solid var(--color-border);
+        background: white;
+        box-shadow: -12px 0 32px rgba(16, 24, 40, 0.18);
+    }
+
+    .editor-tools-drawer__header {
+        display: flex;
+        padding: 16px;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .editor-tools-drawer__header > div {
+        display: grid;
+        min-width: 0;
+        gap: 4px;
+    }
+
+    .editor-tools-drawer__header span {
+        color: var(--color-primary);
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+    }
+
+    .editor-tools-drawer__header h2 {
+        margin: 0;
+        font-family: "Manrope", Arial, sans-serif;
+        font-size: 17px;
+    }
+
+    .editor-tools-drawer__header p {
+        margin: 0;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    .editor-tools-drawer__header [data-drawer-close] {
+        min-height: 44px;
+        padding: 10px 14px;
+        flex: 0 0 auto;
+        border: 1px solid var(--color-primary);
+        border-radius: 12px;
+        color: var(--color-primary);
+        background: white;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    .editor-tools-drawer__list {
+        display: grid;
+        padding: 16px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        gap: 10px;
+        align-content: start;
+    }
+
+    .editor-tools-drawer__list button {
+        min-height: 48px;
+        padding: 10px 14px;
+        border: 1px solid #b8c6e8;
+        border-radius: 11px;
+        color: #344054;
+        background: white;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .editor-tools-drawer__list button:hover:not(:disabled) {
+        border-color: var(--color-primary);
+        background: var(--color-primary-soft);
+    }
+
+    .editor-tools-drawer__list button:disabled {
+        opacity: 0.55;
         cursor: not-allowed;
     }
 

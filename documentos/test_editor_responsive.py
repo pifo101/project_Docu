@@ -46,7 +46,7 @@ class EditorResponsiveTemplateTests(SimpleTestCase):
     def test_mobile_toggles_reference_existing_panels(self):
         markup = self.render_editor()
         for attribute, panel in (
-            ("data-fields-toggle", "editor-field-list"),
+            ("data-tools-open", "editor-tools-drawer"),
             ("data-properties-toggle", "editor-field-properties"),
         ):
             with self.subTest(attribute=attribute):
@@ -59,6 +59,17 @@ class EditorResponsiveTemplateTests(SimpleTestCase):
                 self.assertEqual(attrs["aria-controls"], panel)
                 self.assertIn("disabled", attrs)
         self.assertEqual(len(markup.with_attribute("data-properties-close")), 1)
+        # Sin FAB: no debe existir el toggle antiguo ni herramienta duplicada.
+        self.assertEqual(markup.with_attribute("data-fields-toggle"), [])
+        drawer_tools = markup.with_attribute("data-drawer-field-type")
+        self.assertEqual(len(drawer_tools), 6)
+        self.assertEqual(
+            {attrs["data-drawer-field-type"] for _, attrs in drawer_tools},
+            {"signature", "name", "date", "text", "initials", "checkbox"},
+        )
+        self.assertEqual(len(markup.with_attribute("data-tools-drawer")), 1)
+        self.assertEqual(len(markup.with_attribute("data-drawer-backdrop")), 1)
+        self.assertEqual(len(markup.with_attribute("data-drawer-close")), 1)
 
     def test_properties_are_not_duplicated_and_placement_is_announced(self):
         markup = self.render_editor()

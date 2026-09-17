@@ -44,11 +44,9 @@
         </div>
 
         <div class="upload-description">
-            <div class="upload-description__field">
-                {{ form.descripcion.label_tag }}
+            {{ form.descripcion.label_tag }}
+            <div class="upload-description__control">
                 {{ form.descripcion }}
-            </div>
-            <div class="upload-description__guidance">
                 <small id="id_descripcion_helptext">{{ form.descripcion.help_text }}</small>
                 {{ form.descripcion.errors }}
             </div>

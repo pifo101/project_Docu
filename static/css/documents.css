@@ -48,9 +48,9 @@
 .document-search {
     position: relative;
     display: flex;
-    width: min(480px, 100%);
+    flex: 1 1 220px;
     min-width: 0;
-    flex: 1 1 0;
+    max-width: 480px;
     align-items: center;
 }
 
@@ -439,12 +439,19 @@
     }
 
     .documents-toolbar {
-        display: block;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         padding: 16px;
     }
 
     .document-search {
-        width: 100%;
+        flex: 1 1 120px;
+        max-width: none;
+    }
+
+    .document-search-form {
+        flex: 1 1 200px;
     }
 
     .document-search kbd,
@@ -544,24 +551,22 @@
 }
 
 .document-search-form > .text-link { flex-basis: 100%; }
-.document-search-submit {
+/* El botón reutiliza la estética original .new-document-button (dashboard.css).
+   Aquí solo layout: ancho natural, misma fila que el input, sin rediseño. */
+.document-search-form .new-document-button {
     flex: 0 0 auto;
-    min-height: 44px;
-    padding: 0 16px;
-    border: 0;
-    border-radius: 11px;
-    color: white;
-    background: var(--color-primary);
-    box-shadow: 0 8px 18px rgba(14, 67, 240, .18);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
+    white-space: nowrap;
 }
-.document-search-submit:hover { background: var(--color-primary-hover); }
-.document-search-submit:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .documents-heading > div, .document-entry > * { min-width: 0; overflow-wrap: anywhere; }
 .documents-toolbar { flex-wrap: wrap; }
 .documents-count { padding-top: 8px; }
 .documents-feedback { max-width: calc(100vw - 48px); overflow-wrap: anywhere; }
+
+/* Teléfonos muy pequeños: reducir separación para conservar [input][Buscar]
+   en la misma fila sin overflow. Sin media query que fuerce columna. */
+@media (max-width: 360px) {
+    .document-search-form { gap: 8px; }
+    .document-search-form .new-document-button { padding: 0 12px; }
+}
 
 .document-filter { text-decoration: none; }

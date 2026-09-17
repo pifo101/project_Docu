@@ -835,20 +835,31 @@
 
 .upload-description {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-columns: 190px minmax(0, 1fr);
     align-items: start;
-    gap: 16px;
+    gap: 12px 16px;
     margin-top: 18px;
     font-size: 13px;
 }
 
-.upload-description__field, .upload-description__guidance {
+.upload-description > label {
+    padding-top: 12px;
+    color: #344054;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.upload-description__control {
     display: grid;
     min-width: 0;
-    gap: 8px;
+    gap: 6px;
     overflow-wrap: anywhere;
 }
-.upload-description__guidance { padding-top: 24px; }
+.upload-description__control small {
+    color: var(--color-text-muted);
+    font-size: 11px;
+    line-height: 1.45;
+}
 .upload-description .errorlist { margin: 0; padding-left: 18px; }
 
 .upload-description textarea {
@@ -1294,8 +1305,8 @@
         padding: 20px 20px 0;
     }
 
-    .upload-description { grid-template-columns: minmax(0, 1fr); }
-    .upload-description__guidance { padding-top: 0; }
+    .upload-description { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .upload-description > label { padding-top: 0; }
     .summary-grid { grid-template-columns: minmax(0, 1fr); }
     .summary-card { min-height: 0; }
 
