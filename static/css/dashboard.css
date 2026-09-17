@@ -826,6 +826,26 @@
     stroke-width: 1.8;
 }
 
+.upload-description {
+    display: grid;
+    gap: 8px;
+    margin-top: 18px;
+    font-size: 13px;
+}
+
+.upload-description textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    font: inherit;
+    resize: vertical;
+}
+
+.upload-description small { color: var(--color-text-muted); }
+.upload-description .errorlist { color: #b42318; }
+.document-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 .upload-form {
     padding: 25px 30px 0;
 }

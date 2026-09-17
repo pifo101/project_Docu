@@ -7,6 +7,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from documentos.models import EnvioDocumento
+from documentos.forms import DocumentoForm
 from documentos.services import (
     PENDING_RECIPIENT_STATES,
     recipient_documents_context,
@@ -61,6 +62,7 @@ def dashboard_view(request):
         context = sender_documents_context(request.user)
         documents = context["owned_documents"]
         context.update(
+            form=DocumentoForm(),
             recent_documents=documents[:5],
             preparation_documents=documents.filter(
                 envio__estado=EnvioDocumento.Estado.PREPARACION

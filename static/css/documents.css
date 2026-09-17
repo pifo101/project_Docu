@@ -541,3 +541,13 @@
         transition: none;
     }
 }
+
+.document-search-form {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.document-filter { text-decoration: none; }

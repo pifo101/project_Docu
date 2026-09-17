@@ -28,6 +28,7 @@ class Documento(models.Model):
         validators=[FileExtensionValidator(["pdf"]), validar_pdf],
     )
     nombre_original = models.CharField(max_length=255)
+    descripcion = models.CharField(max_length=1000, blank=True, default="")
     tamano = models.PositiveBigIntegerField()
     hash_sha256 = models.CharField(max_length=64, editable=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)

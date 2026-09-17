@@ -62,6 +62,11 @@ const continueButton = document.querySelector(".upload-continue");
 const maxFileSize = Number(uploadForm?.dataset.maxFileSize || 20 * 1024 * 1024);
 let dragDepth = 0;
 let currentPdf = null;
+if (continueButton) continueButton.disabled = true;
+if (uploadDialog?.hasAttribute("data-upload-initial-open")) {
+    uploadDialog.removeAttribute("open");
+    uploadDialog.showModal();
+}
 
 function resetUpload() {
     uploadForm?.reset();
@@ -78,7 +83,10 @@ function resetUpload() {
 }
 
 function showUploadError(message) {
+    const description = uploadForm?.querySelector('[name="descripcion"]');
+    const descriptionValue = description?.value;
     resetUpload();
+    if (description) description.value = descriptionValue;
     dropZone?.classList.add("drop-zone--error");
     uploadInput?.setAttribute("aria-invalid", "true");
     if (uploadError) uploadError.textContent = message;
@@ -196,7 +204,10 @@ dropZone?.addEventListener("drop", (event) => {
 });
 
 removeFileButton?.addEventListener("click", () => {
+    const description = uploadForm?.querySelector('[name="descripcion"]');
+    const descriptionValue = description?.value;
     resetUpload();
+    if (description) description.value = descriptionValue;
     uploadInput?.focus();
 });
 

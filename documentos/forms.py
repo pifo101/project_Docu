@@ -8,8 +8,10 @@ from .models import Documento
 class DocumentoForm(forms.ModelForm):
     class Meta:
         model = Documento
-        fields = ("archivo",)
-        labels = {"archivo": "Archivo PDF"}
+        fields = ("archivo", "descripcion")
+        labels = {"archivo": "Archivo PDF", "descripcion": "Descripción o comentario"}
+        help_texts = {"descripcion": "Opcional. Máximo 1000 caracteres."}
+        widgets = {"descripcion": forms.Textarea(attrs={"rows": 3})}
 
 
 class SeleccionDestinatariosForm(forms.Form):
