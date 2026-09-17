@@ -3,7 +3,7 @@
 
 {% block title %}Editor de documento | ADICLA Sign{% endblock %}
 {% block body_class %}editor-page{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}?v=interactive-fields-1">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/editor.css' %}?v=responsive-fields-2">{% endblock %}
 
 {% block content %}
 <div class="editor-shell"{% if documento %} data-editor-backend data-pdf-url="{% url 'documentos:view_document' documento.pk %}" data-fields-url="{% url 'documentos:signature_fields' documento.pk %}" data-csrf-token="{{ csrf_token }}"{% endif %}>
@@ -33,7 +33,7 @@
                 <span>Destinatarios del documento</span>
                 <div><i data-recipient-initials>{% if destinatarios %}{{ destinatarios|length }}{% else %}0{% endif %}</i><p><strong data-recipient-name>Destinatarios seleccionados</strong><small data-recipient-email>{% if destinatarios %}Selecciona uno al crear cada campo{% else %}Información temporal{% endif %}</small></p></div>
             </section>
-            <div class="field-list" aria-label="Campos del documento">
+            <div class="field-list" id="editor-field-list" aria-label="Campos del documento">
                 <button class="field-tool field-tool--active" type="button" data-field-type="signature" disabled>
                     <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19c4-6 6-9 8-9 1 0 0 5 2 5 1 0 2-3 3-3s0 3 3 3M4 20h16"/></svg></span>
                     Firma
@@ -66,8 +66,9 @@
                 </button>
             </div>
 
-            <section class="field-properties" aria-labelledby="properties-title">
+            <section class="field-properties" id="editor-field-properties" aria-labelledby="properties-title">
                 <h2 id="properties-title">Propiedades</h2>
+                <button class="editor-mobile-close" type="button" data-properties-close>Cerrar propiedades</button>
                 <p class="field-properties__empty" data-properties-empty>Selecciona un campo para configurarlo.</p>
                 <div class="field-properties__content" data-properties-content hidden>
                     <div class="property-type">
@@ -111,11 +112,19 @@
             </div>
         </section>
     </main>
+    <div class="editor-mobile-actions">
+        <button type="button" data-properties-toggle aria-expanded="false" aria-controls="editor-field-properties" disabled>Propiedades</button>
+        <button class="editor-fab" type="button" data-fields-toggle aria-expanded="false" aria-controls="editor-field-list" disabled>Añadir campo</button>
+    </div>
+    <div class="editor-placement" data-placement hidden>
+        <span data-placement-message role="status" aria-live="polite"></span>
+        <button type="button" data-placement-cancel>Cancelar</button>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 {% if documento %}{{ destinatarios_editor|json_script:"editor-recipients" }}{% endif %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
-<script src="{% static 'js/editor.js' %}?v=interactive-fields-1" defer></script>
+<script src="{% static 'js/editor.js' %}?v=responsive-fields-2" defer></script>
 {% endblock %}

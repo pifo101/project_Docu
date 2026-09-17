@@ -30,7 +30,7 @@
                         {% for documento in recent_documents %}
                         <article class="document-row">
                             <div class="document-icon document-icon--pdf">PDF</div>
-                            <div class="document-info"><strong><a href="{% url 'documentos:document_detail' documento.pk %}">{{ documento.nombre_original }}</a></strong><span>Actualizado {{ documento.fecha_actualizacion|date:"d/m/Y H:i" }}</span></div>
+                            <div class="document-info"><strong><a href="{% url 'documentos:document_detail' documento.pk %}">{{ documento.nombre_original }}</a></strong><span>Actualizado {{ documento.fecha_actualizacion|date:"d/m/Y H:i" }}</span>{% include "documentos/includes/description_popover.html" with documento=documento only %}</div>
                             <span class="status {% if not documento.envio %}status--draft{% elif documento.envio.estado == 'PREPARACION' %}status--viewed{% else %}status--sent{% endif %}"><i></i>{% if not documento.envio %}Sin preparar{% else %}{{ documento.envio.get_estado_display }}{% endif %}</span>
                             <a class="more-button" href="{% url 'documentos:document_detail' documento.pk %}" aria-label="Ver {{ documento.nombre_original }}">Ver</a>
                         </article>

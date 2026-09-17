@@ -45,6 +45,8 @@
     margin-bottom: 28px;
     align-items: flex-end;
     justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
 }
 
 .profile-heading h1 {
@@ -154,12 +156,16 @@
 }
 
 .profile-identity h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
     margin: 0 0 4px;
     font-family: "Manrope", Arial, sans-serif;
     font-size: 17px;
 }
 
 .profile-identity p {
+    min-width: 0;
+    overflow-wrap: anywhere;
     margin: 0 0 11px;
     color: var(--color-text-muted);
     font-size: 10px;
@@ -245,6 +251,7 @@
 
 .profile-details {
     display: grid;
+    min-width: 0;
     gap: 20px;
 }
 
@@ -481,7 +488,7 @@
 
 .profile-secondary-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
 }
 
@@ -586,7 +593,7 @@
 
 .organization-info {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr);
     min-height: 103px;
     margin: 19px 0 14px;
     padding: 14px;
@@ -611,6 +618,8 @@
 
 .organization-info > span:nth-child(2) {
     display: grid;
+    min-width: 0;
+    overflow-wrap: anywhere;
     gap: 3px;
 }
 
@@ -624,6 +633,10 @@
 }
 
 .organization-role {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     padding: 4px 7px;
     border-radius: 99px;
     color: var(--color-primary);
@@ -698,7 +711,7 @@
 
     .profile-identity {
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
         column-gap: 14px;
         text-align: left;
@@ -722,8 +735,9 @@
     }
 
     .profile-identity .role-badge {
-        grid-column: 3;
-        grid-row: 1 / span 2;
+        grid-column: 2;
+        grid-row: auto;
+        justify-self: start;
     }
 
     .profile-nav {
@@ -779,7 +793,7 @@
     }
 
     .profile-panel__header > div > span {
-        display: none;
+        overflow-wrap: anywhere;
     }
 
     .security-note {
@@ -795,7 +809,7 @@
 
 @media (max-width: 420px) {
     .profile-identity {
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto minmax(0, 1fr);
     }
 
     .profile-identity .role-badge {
@@ -805,6 +819,10 @@
     }
 }
 .preferences-panel { overflow: hidden; }
+.profile-panel, .profile-summary, .compact-panel__heading > div { min-width: 0; }
+.profile-panel, .role-badge, .security-note { overflow-wrap: anywhere; }
+.profile-panel[id], .security-note[id] { scroll-margin-top: 96px; }
+.profile-signature-panel form:has(input[type="file"]:focus-visible) .signature-upload-label { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .preferences-options { display: grid; padding: 4px 22px 14px; }
 .preferences-options label { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #f0f1f3; cursor: pointer; }
 .preferences-options label:last-child { border-bottom: 0; }

@@ -113,6 +113,7 @@ function selectPdf(file) {
     }
 
     dropZone?.classList.remove("drop-zone--error");
+    uploadInput?.removeAttribute("aria-invalid");
     if (uploadError) uploadError.textContent = "";
     if (selectedName) selectedName.textContent = file.name;
     if (selectedMeta) selectedMeta.textContent = `${formatFileSize(file.size)} · PDF`;
