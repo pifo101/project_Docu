@@ -18,6 +18,10 @@
             <div class="detail-actions"><a class="outline-action" href="{% url 'documentos:view_document' documento.pk %}">Ver PDF original</a>{% if request.user.cargo_id == 'PRESIDENTE' %}<a class="outline-action" href="{% url 'documentos:download' documento.pk %}">Descargar PDF original</a>{% endif %}{% if request.user.cargo_id == 'PRESIDENTE' and not envio %}<a class="primary-action" href="{% url 'documentos:committee_recipients' documento.pk %}">Preparar envío</a>{% elif request.user.cargo_id == 'PRESIDENTE' and envio.estado == 'PREPARACION' %}<a class="primary-action" href="{% url 'documentos:document_editor' documento.pk %}">Continuar preparación</a>{% endif %}</div>
             <div class="detail-layout{% if not envio %} detail-layout--single{% endif %}">
                 <div class="detail-main">
+                    <section class="workflow-card">
+                        <header class="workflow-card__header"><h2>Descripción o comentario</h2></header>
+                        <div class="tracking-summary__content document-description">{{ documento.descripcion|default:"Sin descripción." }}</div>
+                    </section>
                     {% if envio %}
                     <section class="workflow-card tracking-summary">
                         <header class="workflow-card__header"><div><span class="panel__overline">Seguimiento</span><h2>Progreso de firmas</h2></div><span class="participant-summary">{{ signature_completed }} de {{ signature_total }} completada{% if signature_completed != 1 %}s{% endif %}</span></header>

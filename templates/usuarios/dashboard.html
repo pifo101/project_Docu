@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Panel principal | ADICLA Sign{% endblock %}
 {% block body_class %}dashboard-page{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}"><link rel="stylesheet" href="{% static 'css/documents.css' %}">{% endblock %}
 {% block content %}
 <div class="dashboard-shell">
     {% include "documentos/includes/app_sidebar.html" with active_section="dashboard" %}
@@ -25,6 +25,7 @@
             <div class="content-grid">
                 <section class="panel recent-documents" aria-labelledby="documents-title">
                     <div class="panel__header"><div><p class="panel__overline">Documentos reales</p><h2 id="documents-title">Documentos recientes</h2></div><a href="{% url 'documentos:list' %}">Ver todos <span aria-hidden="true">→</span></a></div>
+                    <div class="documents-toolbar">{% include "documentos/includes/document_search.html" %}</div>
                     <div class="document-list">
                         {% for documento in recent_documents %}
                         <article class="document-row">

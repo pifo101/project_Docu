@@ -1,4 +1,5 @@
-<dialog class="upload-dialog" aria-labelledby="upload-title" aria-describedby="upload-description">
+<noscript><style>.upload-dialog { display: block; position: static; margin: 24px auto; } .upload-dialog [data-upload-close] { display: none; }</style></noscript>
+<dialog class="upload-dialog" aria-labelledby="upload-title" aria-describedby="upload-description"{% if upload_open %} open data-upload-initial-open{% endif %}>
     <div class="upload-dialog__header">
         <div class="upload-dialog__heading">
             <span class="upload-dialog__step">Nuevo documento</span>
@@ -42,11 +43,18 @@
             </button>
         </div>
 
+        <div class="upload-description">
+            {{ form.descripcion.label_tag }}
+            {{ form.descripcion }}
+            <small id="id_descripcion_helptext">{{ form.descripcion.help_text }}</small>
+            {{ form.descripcion.errors }}
+        </div>
+
         <div class="upload-dialog__footer">
             <span><i aria-hidden="true"></i> Tu archivo se procesará de forma segura</span>
             <div>
                 <button class="upload-cancel" type="button" data-upload-close>Cancelar</button>
-                <button class="upload-continue" type="submit" disabled>Continuar</button>
+                <button class="upload-continue" type="submit">Continuar</button>
             </div>
         </div>
     </form>

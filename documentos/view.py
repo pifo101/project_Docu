@@ -137,8 +137,26 @@ def _campo_serializado(campo):
 @require_GET
 def documents_view(request):
     context = sender_documents_context(request.user)
+    query = request.GET.get("q", "").strip()
+    selected_status = request.GET.get("estado", "all")
+    status_filters = {
+        "all": Q(),
+        "unprepared": Q(envio__isnull=True),
+        "preparation": Q(envio__estado=EnvioDocumento.Estado.PREPARACION),
+        "sent": Q(envio__estado=EnvioDocumento.Estado.ENVIADO),
+    }
+    if selected_status not in status_filters:
+        selected_status = "all"
+    documents = context["owned_documents"].filter(status_filters[selected_status])
+    if query:
+        documents = documents.filter(
+            Q(nombre_original__icontains=query) | Q(descripcion__icontains=query)
+        )
     context.update({
-        "documentos": context["owned_documents"],
+        "documentos": documents,
+        "q": query,
+        "selected_status": selected_status,
+        "form": DocumentoForm(),
         "documento_max_file_size": settings.DOCUMENTO_MAX_FILE_SIZE,
         "documento_max_file_size_mb": settings.DOCUMENTO_MAX_FILE_SIZE // (1024 * 1024),
     })
@@ -314,7 +332,10 @@ def send_document_view(request, pk):
 def upload_document_view(request):
     if not _es_presidente_activo(request.user):
         raise PermissionDenied
-    form = DocumentoForm(request.POST or None, request.FILES or None)
+    form = DocumentoForm(
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
+    )
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             documento = form.save(commit=False)
@@ -333,6 +354,8 @@ def upload_document_view(request):
     context.update({
         "documentos": context["owned_documents"],
         "form": form,
+        "upload_open": True,
+        "selected_status": "all",
         "documento_max_file_size": settings.DOCUMENTO_MAX_FILE_SIZE,
         "documento_max_file_size_mb": settings.DOCUMENTO_MAX_FILE_SIZE // (1024 * 1024),
     })
