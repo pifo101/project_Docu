@@ -113,6 +113,12 @@
     gap: 10px;
 }
 
+/* Botón móvil "Herramientas": parte del encabezado, nunca FAB.
+   Oculto en escritorio (paleta normal visible). */
+.editor-header .editor-tools-open {
+    display: none;
+}
+
 .editor-continue:hover:not(:disabled) {
     background: var(--color-primary-hover);
 }
@@ -879,7 +885,8 @@
 
 @media (min-width: 601px) {
     .editor-tools-drawer,
-    .editor-drawer-backdrop {
+    .editor-drawer-backdrop,
+    .editor-header .editor-tools-open {
         display: none !important;
     }
 }
@@ -899,6 +906,8 @@
         position: sticky;
         top: 0;
         min-height: 62px;
+        padding: 0 12px;
+        gap: 8px;
     }
 
     .editor-back span,
@@ -917,7 +926,8 @@
 
     .editor-document {
         display: block;
-        max-width: 44vw;
+        min-width: 0;
+        max-width: none;
     }
 
     .editor-document strong {
@@ -925,9 +935,47 @@
         font-size: 11px;
     }
 
+    .editor-header__actions {
+        flex: 0 0 auto;
+        gap: 8px;
+    }
+
     .editor-continue {
         min-height: 44px;
+        padding: 0 10px;
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    /* Herramientas en el encabezado móvil: visible arriba a la derecha,
+       compacto para convivir con Volver + título + Continuar desde 320 px. */
+    .editor-header .editor-tools-open {
+        display: inline-flex;
+        min-height: 44px;
         padding: 0 12px;
+        flex: 0 0 auto;
+        align-items: center;
+        border: 1px solid var(--color-primary);
+        border-radius: 10px;
+        color: white;
+        background: var(--color-primary);
+        box-shadow: 0 5px 20px rgba(8, 36, 111, 0.25);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .editor-header .editor-tools-open:hover:not(:disabled) {
+        background: var(--color-primary-hover);
+    }
+
+    .editor-header .editor-tools-open:disabled {
+        border-color: #d0d5dd;
+        color: #98a2b3;
+        background: #eaecf0;
+        box-shadow: none;
+        cursor: not-allowed;
     }
 
     .editor-workspace {
@@ -1007,15 +1055,6 @@
         font-size: 13px;
         cursor: pointer;
         pointer-events: auto;
-    }
-
-    .editor-mobile-actions .editor-tools-open {
-        min-height: 48px;
-        border-radius: 12px;
-        color: white;
-        background: var(--color-primary);
-        box-shadow: 0 5px 20px rgba(8, 36, 111, 0.25);
-        font-weight: 700;
     }
 
     .editor-mobile-actions button:disabled {
@@ -1262,6 +1301,18 @@
 
     .editor-feedback {
         top: 70px;
+    }
+}
+
+/* Teléfonos muy pequeños: compactar Herramientas del encabezado
+   para conservar Volver + título + Herramientas + Continuar sin overflow. */
+@media (max-width: 360px) {
+    .editor-header .editor-tools-open {
+        padding: 0 8px;
+        font-size: 11px;
+    }
+    .editor-continue {
+        padding: 0 8px;
     }
 }
 

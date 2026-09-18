@@ -19,7 +19,7 @@
                 <strong data-document-name>{{ documento.nombre_original|default:"Documento PDF" }}</strong>
             </div>
         </div>
-        <div class="editor-header__actions"><button class="editor-continue" type="button" data-editor-continue data-review-url="{% if documento %}{% url 'documentos:send_review' documento.pk %}{% else %}{% url 'documentos:review' %}{% endif %}" disabled>Continuar</button></div>
+        <div class="editor-header__actions"><button class="editor-tools-open" type="button" data-tools-open aria-expanded="false" aria-controls="editor-tools-drawer" disabled>Herramientas</button><button class="editor-continue" type="button" data-editor-continue data-review-url="{% if documento %}{% url 'documentos:send_review' documento.pk %}{% else %}{% url 'documentos:review' %}{% endif %}" disabled>Continuar</button></div>
     </header>
 
     <main class="editor-workspace">
@@ -114,7 +114,6 @@
     </main>
     <div class="editor-mobile-actions">
         <button type="button" data-properties-toggle aria-expanded="false" aria-controls="editor-field-properties" disabled>Propiedades</button>
-        <button class="editor-tools-open" type="button" data-tools-open aria-expanded="false" aria-controls="editor-tools-drawer" disabled>Herramientas</button>
     </div>
     <div class="editor-drawer-backdrop" data-drawer-backdrop hidden></div>
     <aside class="editor-tools-drawer" id="editor-tools-drawer" data-tools-drawer aria-labelledby="tools-drawer-title" hidden>
