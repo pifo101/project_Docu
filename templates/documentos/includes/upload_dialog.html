@@ -45,9 +45,11 @@
 
         <div class="upload-description">
             {{ form.descripcion.label_tag }}
-            {{ form.descripcion }}
-            <small id="id_descripcion_helptext">{{ form.descripcion.help_text }}</small>
-            {{ form.descripcion.errors }}
+            <div class="upload-description__control">
+                {{ form.descripcion }}
+                <small id="id_descripcion_helptext">{{ form.descripcion.help_text }}</small>
+                {{ form.descripcion.errors }}
+            </div>
         </div>
 
         <div class="upload-dialog__footer">

@@ -23,6 +23,17 @@ const recipientEmailElement = document.querySelector("[data-recipient-email]");
 const recipientInitialsElement = document.querySelector("[data-recipient-initials]");
 const propertyRecipient = document.querySelector("[data-property-recipient]");
 const propertyRecipientLabel = document.querySelector("[data-property-recipient-label]");
+const mobileEditor = window.matchMedia("(max-width: 600px)");
+const toolsOpen = document.querySelector("[data-tools-open]");
+const propertiesToggle = document.querySelector("[data-properties-toggle]");
+const propertiesPanel = document.getElementById("editor-field-properties");
+const toolsDrawer = document.querySelector("[data-tools-drawer]");
+const drawerBackdrop = document.querySelector("[data-drawer-backdrop]");
+const drawerClose = document.querySelector("[data-drawer-close]");
+const drawerFieldButtons = [...document.querySelectorAll("[data-drawer-field-type]")];
+const placement = document.querySelector("[data-placement]");
+let pendingFieldType = null;
+let placementTap = null;
 const documentFields = [];
 const backendEditor = Boolean(editorShell);
 const backendRecipients = backendEditor
@@ -135,6 +146,7 @@ function updateBackendFieldTools() {
     fieldTools.forEach((tool) => {
         tool.disabled = backendRecipients.length === 0;
     });
+    syncDrawerState();
 }
 
 function sameFieldId(field, fieldId) {
@@ -209,6 +221,11 @@ function normalizeTextLabel(fieldElement) {
 }
 
 function setSelectedField(fieldElement) {
+    if (fieldElement && mobileEditor.matches) {
+        setPendingFieldType(null);
+        closeToolsDrawer(false);
+        setMobilePanel(null);
+    }
     if (selectedField !== fieldElement) normalizeTextLabel(selectedField);
     selectedField?.classList.remove("document-field--selected");
     selectedField?.setAttribute("aria-selected", "false");
@@ -216,6 +233,55 @@ function setSelectedField(fieldElement) {
     selectedField?.classList.add("document-field--selected");
     selectedField?.setAttribute("aria-selected", "true");
     updatePropertiesPanel();
+    propertiesToggle.disabled = !selectedField;
+    if (!selectedField) setMobilePanel(null);
+}
+
+function setMobilePanel(panel, restoreFocus = false) {
+    const isPropertiesOpen = panel === "properties";
+    propertiesPanel.classList.toggle("is-open", isPropertiesOpen);
+    propertiesToggle.setAttribute("aria-expanded", String(isPropertiesOpen));
+    if (restoreFocus) propertiesToggle.focus({ preventScroll: true });
+}
+
+function isToolsDrawerOpen() {
+    return Boolean(toolsDrawer) && !toolsDrawer.hidden;
+}
+
+function openToolsDrawer() {
+    if (!toolsDrawer || toolsOpen.disabled) return;
+    setPendingFieldType(null);
+    setMobilePanel(null);
+    toolsDrawer.hidden = false;
+    drawerBackdrop.hidden = false;
+    toolsOpen.setAttribute("aria-expanded", "true");
+    drawerClose.focus({ preventScroll: true });
+}
+
+function closeToolsDrawer(restoreFocus = false) {
+    if (!toolsDrawer || toolsDrawer.hidden) return;
+    toolsDrawer.hidden = true;
+    drawerBackdrop.hidden = true;
+    toolsOpen.setAttribute("aria-expanded", "false");
+    if (restoreFocus) toolsOpen.focus({ preventScroll: true });
+}
+
+function syncDrawerState() {
+    if (!toolsOpen) return;
+    const anyEnabled = fieldTools.some((tool) => !tool.disabled);
+    toolsOpen.disabled = !anyEnabled || !loadedPdf || pdfDocumentElement.hidden;
+    drawerFieldButtons.forEach((button) => {
+        const tool = fieldTools.find((item) => item.dataset.fieldType === button.dataset.drawerFieldType);
+        button.disabled = !tool || tool.disabled;
+    });
+}
+
+function setPendingFieldType(type) {
+    pendingFieldType = type;
+    placementTap = null;
+    placement.hidden = !type;
+    placement.querySelector("[data-placement-message]").textContent = type
+        ? `${FIELD_TYPES[type].label}: toca una zona libre del PDF para colocarlo.` : "";
 }
 
 function removeField(fieldElement) {
@@ -378,6 +444,7 @@ function findLayerAtPoint(clientX, clientY) {
 }
 
 function startToolDrag(event) {
+    if (mobileEditor.matches) return;
     if (activeInteraction || !event.isPrimary || event.button !== 0 || !loadedPdf || pdfDocumentElement.hidden) return;
 
     const sourceTool = event.currentTarget;
@@ -668,12 +735,16 @@ async function renderPages() {
     if (!loadedPdf) return;
 
     cancelActiveInteraction();
+    setPendingFieldType(null);
+    closeToolsDrawer(false);
+    if (toolsOpen) toolsOpen.disabled = true;
     setSelectedField(null);
     fieldTools.forEach((tool) => { tool.disabled = true; });
+    syncDrawerState();
     continueButton.disabled = true;
     if (saveButton) saveButton.disabled = true;
     const currentVersion = ++renderVersion;
-    const availableWidth = Math.max(240, pdfDocumentElement.clientWidth);
+    const availableWidth = Math.max(mobileEditor.matches ? 1 : 240, pdfDocumentElement.clientWidth);
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
     renderedWidth = availableWidth;
@@ -723,6 +794,7 @@ async function renderPages() {
     else fieldTools.forEach((tool) => { tool.disabled = false; });
     continueButton.disabled = false;
     if (saveButton) saveButton.disabled = false;
+    syncDrawerState();
 }
 
 async function prepareEditor() {
@@ -807,12 +879,86 @@ document.addEventListener("pointermove", handlePointerMove);
 document.addEventListener("pointerup", finishInteraction);
 document.addEventListener("pointercancel", finishInteraction);
 document.addEventListener("pointerdown", (event) => {
-    if (!event.target.closest(".document-field, .field-properties")) setSelectedField(null);
+    if (mobileEditor.matches) {
+        if (!event.target.closest("[data-tools-drawer], .field-properties, .editor-mobile-actions")) setMobilePanel(null);
+        if (!event.target.closest("[data-tools-drawer]") && !event.target.closest("[data-tools-open]")) closeToolsDrawer(false);
+        if (event.target.closest(".editor-mobile-actions, .editor-placement, [data-editor-save]")) return;
+    }
+    const selectionControls = mobileEditor.matches
+        ? ".document-field, .field-properties" : ".document-field, .field-properties";
+    if (!event.target.closest(selectionControls)) setSelectedField(null);
+});
+toolsOpen.addEventListener("click", () => {
+    if (isToolsDrawerOpen()) closeToolsDrawer(false);
+    else openToolsDrawer();
+});
+drawerFieldButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        if (button.disabled || !loadedPdf || pdfDocumentElement.hidden) return;
+        const type = button.dataset.drawerFieldType;
+        if (!FIELD_TYPES[type]) return;
+        setSelectedField(null);
+        setPendingFieldType(type);
+        closeToolsDrawer(false);
+    });
+});
+drawerClose.addEventListener("click", () => closeToolsDrawer(true));
+drawerBackdrop.addEventListener("click", () => closeToolsDrawer(false));
+propertiesToggle.addEventListener("click", () => {
+    setPendingFieldType(null);
+    closeToolsDrawer(false);
+    const open = propertiesToggle.getAttribute("aria-expanded") !== "true";
+    setMobilePanel(open ? "properties" : null);
+    if (open) propertiesPanel.querySelector("[data-properties-close]").focus({ preventScroll: true });
+});
+document.querySelector("[data-properties-close]").addEventListener("click", () => setMobilePanel(null, true));
+document.querySelector("[data-placement-cancel]").addEventListener("click", () => {
+    setPendingFieldType(null);
+    if (mobileEditor.matches) toolsOpen.focus({ preventScroll: true });
+});
+pdfDocumentElement.addEventListener("pointerdown", (event) => {
+    if (!mobileEditor.matches || !pendingFieldType || !event.isPrimary || event.button !== 0
+        || event.target.closest(".document-field")) return;
+    const layer = event.target.closest(".field-layer");
+    if (layer) placementTap = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, layer };
+});
+document.addEventListener("pointermove", (event) => {
+    if (placementTap?.pointerId === event.pointerId
+        && Math.hypot(event.clientX - placementTap.x, event.clientY - placementTap.y) > 10) placementTap = null;
+});
+document.addEventListener("pointerup", (event) => {
+    if (placementTap?.pointerId !== event.pointerId) return;
+    const tap = placementTap;
+    placementTap = null;
+    if (!pendingFieldType || Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 10
+        || findLayerAtPoint(event.clientX, event.clientY) !== tap.layer) return;
+    const type = pendingFieldType;
+    setPendingFieldType(null);
+    createDocumentField(type, tap.layer, event.clientX, event.clientY);
+});
+document.addEventListener("pointercancel", () => { placementTap = null; });
+// Native scrolling stays enabled; a scroll invalidates only the current tap.
+window.addEventListener("scroll", () => { placementTap = null; }, { capture: true, passive: true });
+mobileEditor.addEventListener("change", () => {
+    setPendingFieldType(null);
+    closeToolsDrawer(false);
+    setMobilePanel(null);
+    cancelActiveInteraction();
+    scheduleResize();
 });
 document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && mobileEditor.matches) {
+        const hadDrawer = isToolsDrawerOpen();
+        const hadPanel = propertiesToggle.getAttribute("aria-expanded") === "true";
+        const hadPending = Boolean(pendingFieldType);
+        setPendingFieldType(null);
+        closeToolsDrawer(false);
+        setMobilePanel(null, hadPanel);
+        if (hadPending || hadDrawer) toolsOpen.focus({ preventScroll: true });
+    }
     const target = event.target;
     const isEditing = target instanceof HTMLElement
-        && (target.matches("input, textarea, [contenteditable='true']") || target.isContentEditable);
+        && (target.matches("input, textarea, select, [contenteditable='true']") || target.isContentEditable);
 
     if (selectedField && !isEditing && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();

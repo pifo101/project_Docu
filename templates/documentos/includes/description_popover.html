@@ -1,0 +1,11 @@
+{% if documento.descripcion %}
+<span class="document-description-control" data-description-control>
+    <button class="description-trigger" type="button" aria-expanded="false" aria-label="Ver descripción de {{ documento.nombre_original }}" data-description-trigger hidden>Descripción</button>
+    <template data-description-template>
+        <section class="description-popover" role="region" aria-label="Descripción del documento" tabindex="-1">
+            <header class="description-popover__header"><strong>Descripción</strong><button type="button" class="description-popover__close" aria-label="Cerrar descripción" data-description-close>&times;</button></header>
+            <div class="description-popover__content" tabindex="0">{{ documento.descripcion }}</div>
+        </section>
+    </template>
+</span>
+{% endif %}

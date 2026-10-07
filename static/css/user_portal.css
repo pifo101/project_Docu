@@ -130,7 +130,7 @@
     padding: 28px;
 }
 
-.user-documents-list .document-row {
+.recipient-document-row {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
 }
 
@@ -142,7 +142,7 @@
 
 .user-account-card {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr);
     padding: clamp(24px, 4vw, 42px);
     align-items: start;
     gap: 24px;
@@ -172,7 +172,8 @@
 .user-account-card dl {
     display: flex;
     margin: 24px 0 0;
-    gap: 40px;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
 .user-account-card dl div {
@@ -198,7 +199,7 @@
 
 @media (max-width: 680px) {
     .user-account-card {
-        grid-template-columns: auto 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .user-account-card form {
@@ -209,13 +210,24 @@
         width: 100%;
     }
 
-    .user-documents-list .document-row {
+    .recipient-document-row {
         grid-template-columns: auto minmax(0, 1fr);
     }
 
-    .user-documents-list .status,
-    .user-documents-list .user-row-action {
+    .recipient-document-row > .status,
+    .recipient-document-row > .user-row-action {
         grid-column: 2;
         justify-self: start;
     }
+}
+
+.user-account-card > div { min-width: 0; overflow-wrap: anywhere; }
+.user-account-card dl > div { min-width: 0; }
+.recipient-document-row > .user-row-action { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.user-portal-content > .profile-signature-panel { margin-top: 24px; }
+@media (max-width: 680px) {
+    .recipient-document-row > .status { grid-row: 2; }
+    .recipient-document-row > .user-row-action { grid-row: 3; }
+    .recipient-document-row > .document-icon { grid-row: 1; }
+    .recipient-document-row > .document-info { grid-column: 2; }
 }
