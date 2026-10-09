@@ -348,6 +348,23 @@ class RegistroUsuarioTests(TestCase):
             "Ya existe un usuario con este correo electrónico.",
         )
 
+    def test_base_rechaza_correo_duplicado_con_mayusculas(self):
+        usuario = get_user_model().objects.create_user(
+            email="usuario-directo@adicla.org.gt",
+            password=self.password,
+            comite=self.comite,
+            cargo=self.cargo,
+        )
+        duplicado = get_user_model()(
+            email="USUARIO-DIRECTO@ADICLA.ORG.GT",
+            password=usuario.password,
+            comite=self.comite,
+            cargo=self.cargo,
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            get_user_model().objects.bulk_create([duplicado])
+
     def test_rechaza_contrasenas_distintas(self):
         response = self.client.post(
             reverse("usuarios:register"),

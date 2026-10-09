@@ -89,9 +89,47 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DB_ENGINE = os.getenv("DB_ENGINE", "sqlite")
+DB_ENGINE = os.getenv("DB_ENGINE")
 
-if DB_ENGINE == "mssql":
+if not DB_ENGINE:
+    raise ImproperlyConfigured("DB_ENGINE must be set explicitly")
+
+if DB_ENGINE == "postgresql":
+    required_database_settings = ["DB_NAME", "DB_USER", "DB_PASSWORD"]
+    missing_database_settings = [
+        setting
+        for setting in required_database_settings
+        if not os.getenv(setting)
+    ]
+
+    if missing_database_settings:
+        raise ImproperlyConfigured(
+            "Missing PostgreSQL environment variables: "
+            + ", ".join(missing_database_settings)
+        )
+
+    database_name = os.environ["DB_NAME"]
+    test_database_name = os.getenv("DB_TEST_NAME", f"test_{database_name}")
+    if test_database_name == database_name:
+        raise ImproperlyConfigured(
+            "DB_TEST_NAME must be different from DB_NAME"
+        )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": database_name,
+            "USER": os.environ["DB_USER"],
+            "PASSWORD": os.environ["DB_PASSWORD"],
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+            "TEST": {
+                "NAME": test_database_name,
+            },
+        }
+    }
+
+elif DB_ENGINE == "mssql":
     db_auth = os.getenv("DB_AUTH", "sql").lower()
 
     required_database_settings = ["DB_NAME", "DB_HOST"]
