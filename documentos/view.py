@@ -19,7 +19,7 @@ from pypdf.errors import PdfReadError
 
 from auditoria.models import EventoAuditoria
 from auditoria.services import registrar_evento
-from usuarios.models import Cargo, Usuario
+from usuarios.models import Usuario
 
 from .forms import DocumentoForm, SeleccionDestinatariosForm
 from .models import CampoFirma, DestinatarioDocumento, Documento, DocumentoResultado, EnvioDocumento
@@ -41,16 +41,16 @@ TIPOS_CAMPO_API = {
 TIPOS_CAMPO_FRONTEND = {value: key for key, value in TIPOS_CAMPO_API.items()}
 
 
-def _es_presidente_activo(usuario):
+def _es_remitente_activo(usuario):
     return (
-        usuario.cargo_id == Cargo.Codigo.PRESIDENTE
+        usuario.tiene_permisos_remitente
         and usuario.comite_id
         and usuario.comite.activo
     )
 
 
-def _documento_de_presidente(request, pk):
-    if not _es_presidente_activo(request.user):
+def _documento_de_remitente(request, pk):
+    if not _es_remitente_activo(request.user):
         raise PermissionDenied
     return get_object_or_404(Documento, pk=pk, propietario=request.user)
 
@@ -166,7 +166,7 @@ def documents_view(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def committee_recipients_view(request, pk):
-    documento = _documento_de_presidente(request, pk)
+    documento = _documento_de_remitente(request, pk)
     integrantes = _integrantes_del_comite(request)
     usuarios_disponibles = _usuarios_disponibles()
     if request.method == "POST":
@@ -212,7 +212,7 @@ def committee_recipients_view(request, pk):
 @login_required
 @require_GET
 def send_review_view(request, pk):
-    documento = _documento_de_presidente(request, pk)
+    documento = _documento_de_remitente(request, pk)
     envio = EnvioDocumento.objects.filter(documento=documento).first()
     if envio is None:
         messages.info(request, "Primero asigna un campo de firma a cada destinatario.")
@@ -250,7 +250,7 @@ def send_review_view(request, pk):
 @login_required
 @require_POST
 def send_document_view(request, pk):
-    documento = _documento_de_presidente(request, pk)
+    documento = _documento_de_remitente(request, pk)
 
     with transaction.atomic():
         envio = (
@@ -330,7 +330,7 @@ def send_document_view(request, pk):
 @login_required
 @require_http_methods(["GET", "POST"])
 def upload_document_view(request):
-    if not _es_presidente_activo(request.user):
+    if not _es_remitente_activo(request.user):
         raise PermissionDenied
     form = DocumentoForm(
         request.POST if request.method == "POST" else None,
@@ -392,7 +392,7 @@ def view_document_view(request, pk):
 @login_required
 @require_GET
 def download_document_view(request, pk):
-    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
+    if not request.user.tiene_permisos_remitente:
         raise PermissionDenied
     documento = get_object_or_404(Documento, pk=pk, propietario=request.user)
     return _respuesta_archivo_pdf(
@@ -489,7 +489,7 @@ def view_result_view(request, pk):
 @login_required
 @require_GET
 def download_result_view(request, pk):
-    if request.user.cargo_id != Cargo.Codigo.PRESIDENTE:
+    if not request.user.tiene_permisos_remitente:
         raise PermissionDenied
     resultado = get_object_or_404(
         DocumentoResultado.objects.select_related("envio__documento").filter(
@@ -522,7 +522,7 @@ def editor_view(request):
 @login_required
 @require_GET
 def document_editor_view(request, pk):
-    documento = _documento_de_presidente(request, pk)
+    documento = _documento_de_remitente(request, pk)
     envio = EnvioDocumento.objects.filter(documento=documento).first()
     if envio is None:
         messages.info(request, "Confirma los destinatarios antes de abrir el editor.")
@@ -542,7 +542,7 @@ def document_editor_view(request, pk):
             {
                 "id": destinatario.pk,
                 "name": (
-                    f"{destinatario.usuario} (Presidente)"
+                    f"{destinatario.usuario} (Remitente)"
                     if destinatario.usuario_id == envio.remitente_id
                     else str(destinatario.usuario)
                 ),
@@ -556,7 +556,7 @@ def document_editor_view(request, pk):
 @login_required
 @require_http_methods(["GET", "POST"])
 def signature_fields_view(request, pk):
-    documento = _documento_de_presidente(request, pk)
+    documento = _documento_de_remitente(request, pk)
     envio = get_object_or_404(
         EnvioDocumento,
         documento=documento,

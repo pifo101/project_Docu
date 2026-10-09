@@ -40,10 +40,10 @@
                 <aside class="panel pending-panel" aria-labelledby="pending-title">
                     <div class="panel__header"><div><p class="panel__overline">Por hacer</p><h2 id="pending-title">Preparaciones</h2></div></div>
                     <div class="task-list">
-                        {% if request.user.cargo_id == 'PRESIDENTE' %}
+                        {% if request.user.tiene_permisos_remitente %}
                         {% for documento in preparation_documents %}<a class="task-card" href="{% url 'documentos:document_editor' documento.pk %}"><span class="task-card__icon task-card__icon--blue">PDF</span><span><strong>Continuar preparación</strong><small>{{ documento.nombre_original }}</small><em>{{ documento.envio.destinatarios.all|length }} destinatarios</em></span><svg class="task-card__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>{% endfor %}
                         {% for documento in unsigned_documents %}<a class="task-card" href="{% url 'documentos:committee_recipients' documento.pk %}"><span class="task-card__icon task-card__icon--blue">PDF</span><span><strong>Preparar envío</strong><small>{{ documento.nombre_original }}</small><em>Seleccionar destinatarios reales</em></span><svg class="task-card__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>{% empty %}{% if not preparation_documents %}<div class="user-empty"><h3>No hay preparaciones pendientes</h3><p>Los nuevos documentos aparecerán aquí.</p></div>{% endif %}{% endfor %}
-                        {% else %}<div class="user-empty"><h3>Consulta documental</h3><p>La preparación de envíos está disponible para presidentes de comité.</p></div>{% endif %}
+                        {% else %}<div class="user-empty"><h3>Consulta documental</h3><p>La preparación de envíos está disponible para remitentes autorizados.</p></div>{% endif %}
                     </div>
                     <a class="secondary-button" href="{% url 'documentos:list' %}">Gestionar documentos</a>
                 </aside>
