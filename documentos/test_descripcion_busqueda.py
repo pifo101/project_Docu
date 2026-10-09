@@ -268,4 +268,5 @@ class DescripcionMigracionTests(TransactionTestCase):
             self.assertEqual(migrado.archivo.name, "documentos/historico.pdf")
             self.assertEqual(migrado.hash_sha256, "a" * 64)
         finally:
-            MigrationExecutor(connection).migrate(actual)
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())

@@ -14,6 +14,52 @@ from .models import (
 )
 
 
+ORGANIZATIONAL_CONSTRAINTS = {
+    "un_presidente_por_comite",
+    "un_vicepresidente_por_comite",
+    "un_secretario_por_comite",
+    "un_tesorero_por_comite",
+}
+
+
+def es_conflicto_integridad_organizacional(error):
+    diagnostico = getattr(error.__cause__, "diag", None)
+    return getattr(diagnostico, "constraint_name", None) in ORGANIZATIONAL_CONSTRAINTS
+
+
+def comites_oficiales():
+    return Comite.objects.filter(
+        activo=True,
+        nombre__in=OFFICIAL_COMMITTEE_NAMES,
+    )
+
+
+def mensaje_conflicto_organizacional(cargo):
+    nombre = dict(Cargo.Codigo.choices).get(cargo.codigo, cargo.nombre).lower()
+    return f"El comité seleccionado ya tiene un {nombre}."
+
+
+def conflicto_organizacional(comite, cargo, *, excluir_usuario=None):
+    if not comite or not cargo or cargo.codigo == Cargo.Codigo.MIEMBRO:
+        return None
+    usuarios = Usuario.objects.filter(comite=comite, cargo=cargo)
+    if excluir_usuario:
+        usuarios = usuarios.exclude(pk=excluir_usuario)
+    return mensaje_conflicto_organizacional(cargo) if usuarios.exists() else None
+
+
+def validar_asignacion_organizacional(form, cleaned_data):
+    comite = cleaned_data.get("comite")
+    cargo = cleaned_data.get("cargo")
+    mensaje = conflicto_organizacional(
+        comite,
+        cargo,
+        excluir_usuario=form.instance.pk,
+    )
+    if mensaje:
+        form.add_error("cargo", mensaje)
+
+
 class RegistroUsuarioForm(forms.ModelForm):
     first_name = forms.CharField(
         label="Nombres",
@@ -51,7 +97,10 @@ class RegistroUsuarioForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["comite"].queryset = Comite.objects.filter(activo=True)
+        self.fields["comite"].queryset = comites_oficiales()
+        self.fields["cargo"].queryset = Cargo.objects.filter(
+            codigo__in=Cargo.Codigo.values,
+        )
 
     def clean_email(self):
         email = normalize_institutional_email(self.cleaned_data["email"])
@@ -70,6 +119,8 @@ class RegistroUsuarioForm(forms.ModelForm):
 
         if password1 and password2 and password1 != password2:
             self.add_error("password2", "Las contraseñas no coinciden.")
+
+        validar_asignacion_organizacional(self, cleaned_data)
 
         return cleaned_data
 
@@ -95,13 +146,6 @@ class RegistroUsuarioForm(forms.ModelForm):
 class RegistroPublicoUsuarioForm(RegistroUsuarioForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["comite"].queryset = Comite.objects.filter(
-            activo=True,
-            nombre__in=OFFICIAL_COMMITTEE_NAMES,
-        )
-        self.fields["cargo"].queryset = Cargo.objects.filter(
-            codigo__in=Cargo.Codigo.values,
-        )
 
 
 class LoginUsuarioForm(forms.Form):
@@ -149,9 +193,17 @@ class UsuarioAdminChangeForm(UserChangeForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        comites = Comite.objects.filter(activo=True)
-        if self.instance and self.instance.comite_id:
-            comites = Comite.objects.filter(
-                Q(activo=True) | Q(pk=self.instance.comite_id)
+        comites = Comite.objects.filter(nombre__in=OFFICIAL_COMMITTEE_NAMES).filter(
+            Q(activo=True) | Q(pk=self.instance.comite_id)
+        )
+        if "comite" in self.fields:
+            self.fields["comite"].queryset = comites
+        if "cargo" in self.fields:
+            self.fields["cargo"].queryset = Cargo.objects.filter(
+                codigo__in=Cargo.Codigo.values,
             )
-        self.fields["comite"].queryset = comites
+
+    def clean(self):
+        cleaned_data = super().clean()
+        validar_asignacion_organizacional(self, cleaned_data)
+        return cleaned_data

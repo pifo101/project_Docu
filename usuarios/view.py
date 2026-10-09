@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -16,8 +17,14 @@ from documentos.services import (
 )
 from firmas.models import FirmaPerfil
 
-from .forms import LoginUsuarioForm, RegistroPublicoUsuarioForm
-from .models import Cargo
+from .forms import (
+    LoginUsuarioForm,
+    RegistroPublicoUsuarioForm,
+    conflicto_organizacional,
+    es_conflicto_integridad_organizacional,
+    mensaje_conflicto_organizacional,
+)
+from .models import Cargo, Comite
 
 
 @require_http_methods(["GET", "POST"])
@@ -44,9 +51,30 @@ def login_view(request):
 def register_view(request):
     form = RegistroPublicoUsuarioForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Cuenta creada. Ya puedes iniciar sesión.")
-        return redirect("usuarios:login")
+        try:
+            with transaction.atomic():
+                comite = Comite.objects.select_for_update().get(
+                    pk=form.cleaned_data["comite"].pk
+                )
+                conflicto = conflicto_organizacional(
+                    comite,
+                    form.cleaned_data["cargo"],
+                )
+                if conflicto:
+                    form.add_error("cargo", conflicto)
+                else:
+                    form.save()
+        except IntegrityError as error:
+            if not es_conflicto_integridad_organizacional(error):
+                raise
+            form.add_error(
+                "cargo",
+                mensaje_conflicto_organizacional(form.cleaned_data["cargo"]),
+            )
+        else:
+            if not form.errors:
+                messages.success(request, "Cuenta creada. Ya puedes iniciar sesión.")
+                return redirect("usuarios:login")
 
     return render(request, "usuarios/register.html", {"form": form})
 

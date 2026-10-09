@@ -96,6 +96,34 @@ class EventoAuditoriaTests(TestCase):
         with self.assertRaises(ValueError):
             registrar_evento(tipo="TOKEN_COPIADO", documento=self.documento)
 
+    def test_registra_evento_administrativo_asociado_a_usuario(self):
+        evento = registrar_evento(
+            tipo=EventoAuditoria.Tipo.USUARIO_ORG_MODIFICADA,
+            usuario_afectado=self.usuario,
+            actor=self.usuario,
+            informacion_adicional={"operacion": "cambio_organizacional"},
+        )
+
+        self.assertIsNone(evento.documento)
+        self.assertIsNone(evento.envio)
+        self.assertEqual(evento.usuario_afectado, self.usuario)
+        self.assertEqual(evento.actor, self.usuario)
+
+    def test_rechaza_evento_con_documento_y_usuario_simultaneos(self):
+        with self.assertRaises(ValueError):
+            registrar_evento(
+                tipo=EventoAuditoria.Tipo.USUARIO_ORG_MODIFICADA,
+                documento=self.documento,
+                usuario_afectado=self.usuario,
+            )
+
+    def test_rechaza_tipo_administrativo_sin_usuario_afectado(self):
+        with self.assertRaises(ValueError):
+            registrar_evento(
+                tipo=EventoAuditoria.Tipo.USUARIO_ORG_MODIFICADA,
+                documento=self.documento,
+            )
+
     def test_admin_no_permite_modificar_eventos(self):
         administracion = EventoAuditoriaAdmin(EventoAuditoria, AdminSite())
         request = RequestFactory().get("/admin/auditoria/eventoauditoria/")
