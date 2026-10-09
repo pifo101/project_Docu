@@ -10,9 +10,15 @@ class EventoAuditoria(models.Model):
         FIRMA_COMPLETADA = "FIRMA_COMPLETADA", "Firma completada"
         DOCUMENTO_RECHAZADO = "DOCUMENTO_RECHAZADO", "Documento rechazado"
         PROCESO_FINALIZADO = "PROCESO_FINALIZADO", "Proceso finalizado"
+        USUARIO_ORG_MODIFICADA = (
+            "USUARIO_ORG_MODIFICADA",
+            "Organización de usuario modificada",
+        )
 
     documento = models.ForeignKey(
         "documentos.Documento",
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
         related_name="eventos_auditoria",
     )
@@ -22,6 +28,13 @@ class EventoAuditoria(models.Model):
         blank=True,
         on_delete=models.PROTECT,
         related_name="eventos_auditoria",
+    )
+    usuario_afectado = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="eventos_administrativos_recibidos",
     )
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -42,7 +55,28 @@ class EventoAuditoria(models.Model):
         indexes = [
             models.Index(fields=("documento", "fecha_hora"), name="aud_doc_fecha_idx"),
             models.Index(fields=("envio", "fecha_hora"), name="aud_env_fecha_idx"),
+            models.Index(
+                fields=("usuario_afectado", "fecha_hora"),
+                name="aud_usuario_fecha_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        documento__isnull=False,
+                        usuario_afectado__isnull=True,
+                    )
+                    | models.Q(
+                        documento__isnull=True,
+                        envio__isnull=True,
+                        usuario_afectado__isnull=False,
+                    )
+                ),
+                name="auditoria_contexto_valido",
+            )
         ]
 
     def __str__(self):
-        return f"{self.get_tipo_display()} - {self.documento}"
+        contexto = self.documento or self.usuario_afectado
+        return f"{self.get_tipo_display()} - {contexto}"

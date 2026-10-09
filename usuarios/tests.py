@@ -251,6 +251,55 @@ class RegistroUsuarioTests(TestCase):
             secretario,
         )
 
+    def test_registro_publico_acepta_presidente_con_efecto_inmediato(self):
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+
+        response = self.client.post(
+            reverse("usuarios:register"),
+            self.datos_validos(
+                cargo=presidente.codigo,
+                email="presidente-registro@adicla.org.gt",
+            ),
+        )
+
+        self.assertRedirects(response, reverse("usuarios:login"))
+        usuario = get_user_model().objects.get(
+            email="presidente-registro@adicla.org.gt"
+        )
+        self.assertEqual(usuario.cargo, presidente)
+        self.assertFalse(usuario.is_staff)
+        self.assertFalse(usuario.is_superuser)
+        self.assertFalse(usuario.user_permissions.exists())
+
+    def test_registro_publico_rechaza_segundo_presidente_con_mensaje_claro(self):
+        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
+        get_user_model().objects.create_user(
+            email="presidente-existente@adicla.org.gt",
+            password=self.password,
+            comite=self.comite,
+            cargo=presidente,
+        )
+
+        response = self.client.post(
+            reverse("usuarios:register"),
+            self.datos_validos(
+                cargo=presidente.codigo,
+                email="segundo-presidente@adicla.org.gt",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "cargo",
+            "El comité seleccionado ya tiene un presidente.",
+        )
+        self.assertFalse(
+            get_user_model().objects.filter(
+                email="segundo-presidente@adicla.org.gt"
+            ).exists()
+        )
+
     def test_registro_publico_rechaza_cargo_no_permitido(self):
         response = self.client.post(
             reverse("usuarios:register"),
