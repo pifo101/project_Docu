@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
@@ -118,6 +118,13 @@ class DescripcionBusquedaTests(TestCase):
     def test_busqueda_fragmento_descripcion(self):
         documento = self.documento(descripcion="Reunión mensual del comité de comunicación")
         self.assertQuerySetEqual(self.buscar("comunicación").context["documentos"], [documento])
+
+    def test_busqueda_unicode_ignora_mayusculas(self):
+        documento = self.documento(descripcion="Reunión de comunicación con Ñandú")
+        self.assertQuerySetEqual(
+            self.buscar("REUNIÓN DE COMUNICACIÓN CON ÑANDÚ").context["documentos"],
+            [documento],
+        )
 
     def test_busqueda_sin_coincidencias(self):
         self.documento()
@@ -237,7 +244,7 @@ class DescripcionBusquedaTests(TestCase):
         self.assertContains(self.client.get(reverse("documentos:document_detail", args=[documento.pk])), descripcion)
 
 
-class DescripcionMigracionTests(TestCase):
+class DescripcionMigracionTests(TransactionTestCase):
     def test_migracion_con_documento_preexistente(self):
         anterior = [("documentos", "0007_campos_interactivos")]
         actual = [("documentos", "0008_documento_descripcion")]

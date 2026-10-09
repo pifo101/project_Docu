@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 
 
 INSTITUTIONAL_EMAIL_DOMAIN = "adicla.org.gt"
@@ -146,6 +147,10 @@ class Usuario(AbstractUser):
         verbose_name = "usuario"
         verbose_name_plural = "usuarios"
         constraints = [
+            models.UniqueConstraint(
+                Lower("email"),
+                name="usuario_email_ci_unico",
+            ),
             models.UniqueConstraint(
                 fields=("comite",),
                 condition=Q(cargo=Cargo.Codigo.PRESIDENTE),

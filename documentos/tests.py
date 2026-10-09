@@ -13,7 +13,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.staticfiles import finders
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -2797,8 +2797,14 @@ class ResultadoConcurrencyTests(TransactionTestCase):
 
     def setUp(self):
         self.comite = Comite.objects.create(nombre="Comite concurrencia")
-        presidente = Cargo.objects.get(codigo=Cargo.Codigo.PRESIDENTE)
-        miembro = Cargo.objects.get(codigo=Cargo.Codigo.MIEMBRO)
+        presidente, _ = Cargo.objects.get_or_create(
+            codigo=Cargo.Codigo.PRESIDENTE,
+            defaults={"nombre": "Presidente", "es_directivo": True},
+        )
+        miembro, _ = Cargo.objects.get_or_create(
+            codigo=Cargo.Codigo.MIEMBRO,
+            defaults={"nombre": "Miembro", "es_directivo": False},
+        )
         self.propietario = get_user_model().objects.create_user(
             email="concurrencia-presidente@adicla.org.gt",
             password="ClaveSegura!2026",
@@ -2863,6 +2869,8 @@ class ResultadoConcurrencyTests(TransactionTestCase):
                 resultados.append(generar_resultado_si_completo(self.envio.pk))
             except Exception as error:  # pragma: no cover - diagnóstico
                 errores.append(error)
+            finally:
+                connections.close_all()
 
         hilos = [threading.Thread(target=worker) for _ in range(2)]
         for hilo in hilos:
