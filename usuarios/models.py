@@ -111,6 +111,11 @@ class Cargo(models.Model):
 
 
 class Usuario(AbstractUser):
+    CARGOS_REMITENTE = frozenset({
+        Cargo.Codigo.PRESIDENTE,
+        Cargo.Codigo.SECRETARIO,
+    })
+
     username = None
     email = models.EmailField(
         "correo electrónico",
@@ -175,6 +180,10 @@ class Usuario(AbstractUser):
 
     def __str__(self):
         return self.get_full_name() or self.email
+
+    @property
+    def tiene_permisos_remitente(self):
+        return self.cargo_id in self.CARGOS_REMITENTE
 
     def clean(self):
         super().clean()

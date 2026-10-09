@@ -105,6 +105,20 @@ class AdministracionUsuariosTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("admin:login"), response.url)
 
+        secretario = get_user_model().objects.create_user(
+            email="secretario-sin-admin@adicla.org.gt",
+            password=self.password,
+            comite=self.comite_b,
+            cargo=self.secretario,
+        )
+        cliente_secretario = Client()
+        cliente_secretario.force_login(secretario)
+        response = cliente_secretario.get(
+            reverse("admin:usuarios_usuario_changelist")
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("admin:login"), response.url)
+
     def test_cambio_administrativo_requiere_csrf(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.manager)
@@ -324,13 +338,23 @@ class AdministracionUsuariosTests(TestCase):
             "Requieren tu atención",
         )
 
-        self.assertEqual(self.cambiar(cargo=self.presidente).status_code, 302)
+        self.assertEqual(self.cambiar(cargo=self.secretario).status_code, 302)
         self.assertEqual(cliente_usuario.get(upload_url).status_code, 200)
         self.assertEqual(cliente_usuario.get(recipients_url).status_code, 200)
         self.assertContains(
             cliente_usuario.get(reverse("usuarios:dashboard")),
             "Documentos recientes",
         )
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.cambiar(cargo=self.presidente).status_code, 302)
+        self.assertEqual(cliente_usuario.get(upload_url).status_code, 200)
+        self.assertEqual(cliente_usuario.get(recipients_url).status_code, 200)
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.cambiar(cargo=self.secretario).status_code, 302)
+        self.assertEqual(cliente_usuario.get(upload_url).status_code, 200)
+        self.assertEqual(cliente_usuario.get(recipients_url).status_code, 200)
 
         self.target.refresh_from_db()
         self.assertEqual(self.cambiar(cargo=self.miembro).status_code, 302)
@@ -354,13 +378,18 @@ class AdministracionUsuariosTests(TestCase):
             cargo=self.miembro,
         )
 
-        self.assertEqual(self.cambiar(cargo=self.presidente).status_code, 302)
+        self.assertEqual(self.cambiar(cargo=self.secretario).status_code, 302)
 
         documento.refresh_from_db()
         otro.refresh_from_db()
         self.assertEqual(documento.propietario, self.target)
         self.assertEqual(otro.cargo, self.miembro)
         self.assertEqual(otro.comite, self.comite_b)
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.cambiar(cargo=self.miembro).status_code, 302)
+        documento.refresh_from_db()
+        self.assertEqual(documento.propietario, self.target)
 
     def test_auditoria_es_consultable_pero_inmutable(self):
         self.cambiar(cargo=self.secretario)

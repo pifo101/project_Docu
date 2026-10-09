@@ -117,8 +117,9 @@ flujo actual del MVP.
 
 ## Administración de cargos y comités
 
-La gestión organizacional reutiliza Django Admin en `/admin/`. El cargo
-`PRESIDENTE` es un rol funcional de ADICLA y no concede acceso administrativo.
+La gestión organizacional reutiliza Django Admin en `/admin/`. Los cargos
+`PRESIDENTE` y `SECRETARIO` son roles funcionales de remitente y no conceden
+acceso administrativo.
 Para ingresar al Admin, una cuenta debe tener `is_staff=True` y permisos Django
 explícitos. Un gestor organizacional requiere, como mínimo:
 
@@ -142,38 +143,38 @@ rechazar una asignación inválida no genera un evento exitoso.
 
 Los cambios de cargo se aplican en las comprobaciones de backend desde la
 siguiente solicitud. No transfieren documentos, envíos, firmas ni auditorías.
-Un antiguo presidente conserva la propiedad y las vistas históricas permitidas
-por las reglas actuales, pero pierde las nuevas operaciones reservadas al
-presidente. El alcance exacto de acceso a documentos anteriores debe revisarse
-si la empresa requiere una política distinta en el futuro.
+Un antiguo remitente conserva la propiedad y las vistas históricas permitidas
+por las reglas actuales, pero pierde las operaciones reservadas a los cargos
+`PRESIDENTE` y `SECRETARIO`. El alcance exacto de acceso a documentos anteriores
+debe revisarse si la empresa requiere una política distinta en el futuro.
 
 ### Riesgo funcional aceptado
 
 Por decisión funcional comunicada por la empresa, el registro público conserva
 los cinco cargos y el cargo elegido tiene efecto inmediato. Esto incluye
-`PRESIDENTE`; la administración posterior no elimina el riesgo previo a esa
-revisión.
+`PRESIDENTE` y `SECRETARIO`; la administración posterior no elimina el riesgo
+previo a esa revisión.
 
 Condiciones para explotarlo:
 
 - Poder acceder al formulario público.
 - Proporcionar una dirección con formato `@adicla.org.gt`.
-- Elegir un comité oficial sin otro presidente registrado.
+- Elegir un comité oficial sin otro usuario con el mismo cargo directivo.
 - Completar las validaciones normales de la cuenta.
 
 Consecuencias potenciales:
 
-- Obtener inmediatamente las funciones documentales de un presidente.
+- Obtener inmediatamente las funciones documentales de remitente.
 - Cargar documentos y preparar envíos para el comité seleccionado.
-- Ocupar la restricción de presidente único e impedir otro registro equivalente.
+- Ocupar la restricción única del cargo e impedir otro registro equivalente.
 
 Controles técnicos existentes:
 
 - Solo se aceptan el dominio configurado, comités oficiales activos y los cinco
   cargos definidos.
-- PostgreSQL impide más de un presidente por comité.
+- PostgreSQL impide más de un presidente o secretario por comité.
 - Las operaciones documentales validan el cargo y la propiedad en el backend.
-- Un presidente no obtiene `is_staff`, `is_superuser` ni permisos Django.
+- Un remitente no obtiene `is_staff`, `is_superuser` ni permisos Django.
 - Un administrador autorizado puede corregir posteriormente el cargo o comité,
   y el cambio queda auditado.
 
@@ -181,7 +182,7 @@ Limitaciones de estos controles:
 
 - El formato del correo no verifica la identidad ni la posesión de una cuenta
   institucional.
-- La unicidad evita un segundo presidente, pero no valida al primero.
+- La unicidad evita repetir el cargo directivo, pero no valida al primer registro.
 - Corregir el cargo después del registro no revierte acciones ya realizadas ni
   elimina el acceso que existió antes de la corrección.
 

@@ -24,7 +24,7 @@ from .forms import (
     es_conflicto_integridad_organizacional,
     mensaje_conflicto_organizacional,
 )
-from .models import Cargo, Comite
+from .models import Comite
 
 
 @require_http_methods(["GET", "POST"])
@@ -85,7 +85,7 @@ def dashboard_view(request):
     if (
         request.user.is_staff
         or request.user.is_superuser
-        or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
+        or request.user.tiene_permisos_remitente
     ):
         context = sender_documents_context(request.user)
         documents = context["owned_documents"]
@@ -118,7 +118,7 @@ def profile_view(request):
     sender_portal = (
         request.user.is_staff
         or request.user.is_superuser
-        or request.user.cargo_id == Cargo.Codigo.PRESIDENTE
+        or request.user.tiene_permisos_remitente
     )
     context = (
         sender_documents_context(request.user)
