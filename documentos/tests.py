@@ -1091,7 +1091,7 @@ class EnvioDocumentoTests(TestCase):
             ).exists()
         )
 
-    def test_doble_apertura_registra_una_sola_visualizacion(self):
+    def test_doble_apertura_del_pdf_no_registra_visualizacion(self):
         _, destinatario = self.crear_envio()
         self.client.force_login(self.miembro)
         url = reverse("documentos:received_document", args=[destinatario.pk])
@@ -1100,12 +1100,13 @@ class EnvioDocumentoTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 200)
 
         destinatario.refresh_from_db()
-        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.VISTO)
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(destinatario.fecha_visualizacion)
         self.assertEqual(
             EventoAuditoria.objects.filter(
                 tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
             ).count(),
-            1,
+            0,
         )
 
     def test_subir_crea_nuevo_registro_sin_modificar_existente(self):
@@ -1565,7 +1566,7 @@ class EnvioDocumentoTests(TestCase):
 
         self.assertNotContains(response, "acta.pdf")
 
-    def test_destinatario_abre_documento_y_cambia_a_visto(self):
+    def test_destinatario_abre_documento_sin_cambiar_estado(self):
         _, destinatario = self.crear_envio()
         self.client.force_login(self.miembro)
 
@@ -1582,13 +1583,27 @@ class EnvioDocumentoTests(TestCase):
         self.assertIn("no-store", response["Cache-Control"])
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
         self.assertEqual(contenido, b"%PDF-1.7\nacta")
-        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.VISTO)
-        self.assertIsNotNone(destinatario.fecha_visualizacion)
-        evento = EventoAuditoria.objects.get(
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(destinatario.fecha_visualizacion)
+        self.assertFalse(EventoAuditoria.objects.filter(
             tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        ).exists())
+
+    def test_head_del_pdf_no_cambia_estado(self):
+        _, destinatario = self.crear_envio()
+        self.client.force_login(self.miembro)
+
+        response = self.client.head(
+            reverse("documentos:received_document", args=[destinatario.pk])
         )
-        self.assertEqual(evento.envio, destinatario.envio)
-        self.assertEqual(evento.actor, self.miembro)
+
+        self.assertEqual(response.status_code, 405)
+        destinatario.refresh_from_db()
+        self.assertEqual(destinatario.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(destinatario.fecha_visualizacion)
+        self.assertFalse(EventoAuditoria.objects.filter(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        ).exists())
 
     def test_usuario_no_destinatario_no_puede_abrir_documento(self):
         _, destinatario = self.crear_envio()
@@ -1635,7 +1650,34 @@ class EditorPageTests(TestCase):
         self.assertContains(response, "data-editor-continue")
         self.assertContains(response, f'data-review-url="{reverse("documentos:review")}"')
         self.assertContains(response, "pdf.min.js")
+        self.assertContains(response, "/static/vendor/pdfjs/3.11.174/pdf.min.js")
+        self.assertContains(response, "/static/vendor/pdfjs/3.11.174/pdf.worker.min.js")
+        self.assertNotContains(response, "cdnjs.cloudflare.com")
         self.assertNotContains(response, "Próximamente")
+
+    def test_pdfjs_local_incluye_libreria_worker_y_licencia(self):
+        main_path = finders.find("vendor/pdfjs/3.11.174/pdf.min.js")
+        worker_path = finders.find("vendor/pdfjs/3.11.174/pdf.worker.min.js")
+        license_path = finders.find("vendor/pdfjs/3.11.174/LICENSE")
+
+        self.assertTrue(main_path)
+        self.assertTrue(worker_path)
+        self.assertTrue(license_path)
+        with open(main_path, encoding="utf-8") as main_file:
+            self.assertIn("3.11.174", main_file.read())
+        with open(worker_path, encoding="utf-8") as worker_file:
+            self.assertIn("3.11.174", worker_file.read())
+        with open(license_path, encoding="utf-8") as license_file:
+            self.assertIn("Apache License", license_file.read())
+
+    def test_editor_configura_worker_local_y_desactiva_eval(self):
+        script_path = finders.find("js/editor.js")
+        with open(script_path, encoding="utf-8") as script:
+            javascript = script.read()
+
+        self.assertIn("editorRoot.dataset.pdfWorkerUrl", javascript)
+        self.assertIn("isEvalSupported: false", javascript)
+        self.assertNotIn("cdnjs.cloudflare.com", javascript)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

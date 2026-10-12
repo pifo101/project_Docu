@@ -3,6 +3,7 @@ import json
 import shutil
 import struct
 import tempfile
+import threading
 import zlib
 from datetime import timedelta
 from decimal import Decimal
@@ -13,8 +14,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
-from django.test import Client, TestCase, override_settings
+from django.db import IntegrityError, connections, transaction
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from pypdf import PdfReader, PdfWriter
@@ -381,7 +382,7 @@ class FirmaFlujoTests(TestCase):
         )
         self.documento.save()
 
-    def test_destinatario_puede_acceder_y_la_revision_marca_visto(self):
+    def test_destinatario_puede_acceder_sin_registrar_visualizacion_por_get(self):
         self.client.force_login(self.destinatario)
 
         response = self.client.get(self.url)
@@ -396,13 +397,12 @@ class FirmaFlujoTests(TestCase):
         self.assertContains(response, 'method="post"')
         self.assertContains(response, 'data-protected="true"')
         self.assertContains(response, 'class="recipient-viewer recipient-viewer--protected"')
-        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
-        self.assertIsNotNone(self.solicitud.fecha_visualizacion)
-        evento = EventoAuditoria.objects.get(
-            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        self.assertContains(
+            response,
+            reverse("firmas:recipient_viewed", args=[self.solicitud.pk]),
         )
-        self.assertEqual(evento.envio, self.envio)
-        self.assertEqual(evento.actor, self.destinatario)
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
 
         segunda_apertura = self.client.get(self.url)
         self.assertEqual(segunda_apertura.status_code, 200)
@@ -412,8 +412,79 @@ class FirmaFlujoTests(TestCase):
                 envio=self.envio,
                 actor=self.destinatario,
             ).count(),
-            1,
+            0,
         )
+
+    def test_post_visualizacion_registra_una_sola_primera_visualizacion(self):
+        self.client.force_login(self.destinatario)
+        url = reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+
+        primera = self.client.post(url)
+        self.solicitud.refresh_from_db()
+        fecha_original = self.solicitud.fecha_visualizacion
+        segunda = self.client.post(url)
+        self.solicitud.refresh_from_db()
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertTrue(primera.json()["registrada"])
+        self.assertEqual(segunda.status_code, 200)
+        self.assertFalse(segunda.json()["registrada"])
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
+        self.assertIsNotNone(fecha_original)
+        self.assertEqual(self.solicitud.fecha_visualizacion, fecha_original)
+        evento = EventoAuditoria.objects.get(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        )
+        self.assertEqual(evento.envio, self.envio)
+        self.assertEqual(evento.actor, self.destinatario)
+
+    def test_post_visualizacion_de_otro_usuario_y_anonimo_se_rechaza(self):
+        url = reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+
+        self.assertEqual(self.client.post(url).status_code, 302)
+        self.client.force_login(self.no_destinatario)
+        self.assertEqual(self.client.post(url).status_code, 404)
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertFalse(EventoAuditoria.objects.exists())
+
+    def test_post_visualizacion_exige_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.destinatario)
+
+        response = client.post(
+            reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+
+    def test_get_y_head_del_endpoint_no_registran_visualizacion(self):
+        self.client.force_login(self.destinatario)
+        url = reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.assertEqual(self.client.head(url).status_code, 405)
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.PENDIENTE)
+        self.assertFalse(EventoAuditoria.objects.exists())
+
+    def test_post_visualizacion_de_firmado_no_retrocede_ni_crea_evento(self):
+        self.solicitud.estado = DestinatarioDocumento.Estado.FIRMADO
+        self.solicitud.save(update_fields=("estado",))
+        self.client.force_login(self.destinatario)
+
+        response = self.client.post(
+            reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["registrada"])
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
+        self.assertFalse(EventoAuditoria.objects.exists())
 
     def test_flujo_real_no_habilita_fallback_de_documento_demo(self):
         self.client.force_login(self.destinatario)
@@ -601,7 +672,7 @@ class FirmaFlujoTests(TestCase):
         self.assertEqual(firma.metodo, Firma.Metodo.DIBUJADA)
         self.assertTrue(bytes(firma.imagen).startswith(b"\x89PNG"))
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
-        self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
         evento = EventoAuditoria.objects.get(tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA)
         self.assertEqual(evento.documento, self.documento)
         self.assertEqual(evento.envio, self.envio)
@@ -809,11 +880,28 @@ class FirmaFlujoTests(TestCase):
 
         self.assertEqual(self.solicitud.fecha_visualizacion, fecha_original)
 
-    def test_post_directo_desde_pendiente_registra_visualizacion_y_firma(self):
+    def test_post_directo_desde_pendiente_firma_sin_inventar_visualizacion(self):
         self._post()
         self.solicitud.refresh_from_db()
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
+        self.assertFalse(EventoAuditoria.objects.filter(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        ).exists())
+
+    def test_firma_continua_funcionando_despues_de_registrar_visualizacion(self):
+        self.client.force_login(self.destinatario)
+        self.client.post(reverse("firmas:recipient_viewed", args=[self.solicitud.pk]))
+
+        response = self._post()
+        self.solicitud.refresh_from_db()
+
+        self.assertRedirects(response, reverse("documentos:user_completed"))
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
         self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        self.assertEqual(EventoAuditoria.objects.filter(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO
+        ).count(), 1)
 
     def test_sin_consentimiento_no_firma(self):
         response = self._post(consentimiento="")
@@ -1154,6 +1242,11 @@ class FirmaFlujoTests(TestCase):
         self.assertIn('recipientViewer.addEventListener("dragstart"', javascript)
         self.assertIn('document.addEventListener("keydown"', javascript)
         self.assertIn('["s", "p"].includes', javascript)
+        self.assertIn('method: "POST"', javascript)
+        self.assertIn('"X-CSRFToken": recipientConfig.dataset.csrfToken', javascript)
+        self.assertIn("if (pageNumber === 1) void recordTechnicalVisualization();", javascript)
+        self.assertIn("isEvalSupported: false", javascript)
+        self.assertNotIn("cdnjs.cloudflare.com", javascript)
         self.assertIn(".recipient-viewer--protected .recipient-document", css)
         self.assertIn("@media print", css)
         self.assertIn(".recipient-viewer--protected { display: none !important; }", css)
@@ -1199,7 +1292,7 @@ class FirmaFlujoTests(TestCase):
         self.assertTrue(CampoFirma.objects.filter(pk=campo.pk).exists())
         self.assertEqual(campo.destinatario, firma.destinatario)
 
-    def test_metodo_perfil_desde_pendiente_registra_visualizacion(self):
+    def test_metodo_perfil_desde_pendiente_no_inventa_visualizacion(self):
         FirmaPerfil.objects.create(
             usuario=self.destinatario,
             imagen=png_bytes(),
@@ -1208,7 +1301,7 @@ class FirmaFlujoTests(TestCase):
         self._post(metodo=Firma.Metodo.PERFIL, firma="")
         self.solicitud.refresh_from_db()
         self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.FIRMADO)
-        self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        self.assertIsNone(self.solicitud.fecha_visualizacion)
 
     def test_metodo_perfil_requiere_consentimiento(self):
         FirmaPerfil.objects.create(
@@ -1279,6 +1372,89 @@ class FirmaFlujoTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class VisualizacionConcurrencyTests(TransactionTestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        comite = Comite.objects.create(nombre="Comite visualizacion concurrente")
+        presidente, _ = Cargo.objects.get_or_create(
+            codigo=Cargo.Codigo.PRESIDENTE,
+            defaults={"nombre": "Presidente", "es_directivo": True},
+        )
+        miembro, _ = Cargo.objects.get_or_create(
+            codigo=Cargo.Codigo.MIEMBRO,
+            defaults={"nombre": "Miembro", "es_directivo": False},
+        )
+        propietario = get_user_model().objects.create_user(
+            email="visualizacion-presidente@adicla.org.gt",
+            password="ClaveSegura!2026",
+            comite=comite,
+            cargo=presidente,
+        )
+        self.usuario = get_user_model().objects.create_user(
+            email="visualizacion-firmante@adicla.org.gt",
+            password="ClaveSegura!2026",
+            comite=comite,
+            cargo=miembro,
+        )
+        documento = Documento.objects.create(
+            propietario=propietario,
+            archivo=SimpleUploadedFile(
+                "concurrente.pdf", b"%PDF-1.7\nconcurrente", content_type="application/pdf"
+            ),
+            nombre_original="concurrente.pdf",
+        )
+        envio = EnvioDocumento.objects.create(
+            documento=documento,
+            remitente=propietario,
+            estado=EnvioDocumento.Estado.ENVIADO,
+        )
+        self.solicitud = DestinatarioDocumento.objects.create(
+            envio=envio,
+            usuario=self.usuario,
+        )
+
+    def test_post_concurrentes_crean_una_sola_visualizacion(self):
+        url = reverse("firmas:recipient_viewed", args=[self.solicitud.pk])
+        clients = [Client(), Client()]
+        for client in clients:
+            client.force_login(self.usuario)
+        barrera = threading.Barrier(2)
+        respuestas = []
+        errores = []
+
+        def worker(client):
+            try:
+                barrera.wait(timeout=30)
+                respuestas.append(client.post(url))
+            except Exception as error:  # pragma: no cover - diagnóstico
+                errores.append(error)
+            finally:
+                connections.close_all()
+
+        hilos = [threading.Thread(target=worker, args=(client,)) for client in clients]
+        for hilo in hilos:
+            hilo.start()
+        for hilo in hilos:
+            hilo.join(timeout=120)
+
+        self.assertTrue(all(not hilo.is_alive() for hilo in hilos))
+        self.assertEqual(errores, [])
+        self.assertEqual([response.status_code for response in respuestas], [200, 200])
+        self.assertEqual(sum(response.json()["registrada"] for response in respuestas), 1)
+        self.solicitud.refresh_from_db()
+        self.assertEqual(self.solicitud.estado, DestinatarioDocumento.Estado.VISTO)
+        self.assertIsNotNone(self.solicitud.fecha_visualizacion)
+        self.assertEqual(EventoAuditoria.objects.filter(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+            envio=self.solicitud.envio,
+        ).count(), 1)
+
+
 class FirmaSinOrdenTests(TestCase):
     @classmethod
     def setUpTestData(cls):
