@@ -4,12 +4,24 @@
 
 PostgreSQL es el motor oficial del proyecto. Django 5.2 requiere PostgreSQL 14
 o posterior; el entorno local validado utiliza PostgreSQL 17 y Psycopg 3 con
-la implementación binaria.
+la implementación binaria. Para cPanel se recomienda Python 3.12 y un entorno
+virtual creado por la interfaz de aplicaciones Python del hosting.
 
-Instale las dependencias dentro del entorno virtual:
+En Linux/cPanel, active el entorno virtual indicado por el proveedor e instale
+las dependencias fijadas del proyecto con el mismo intérprete que ejecutará
+Passenger:
+
+```bash
+python --version
+python -m pip install -r requirements.txt
+python -m pip check
+```
+
+En el entorno local de Windows, el comando equivalente es:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
 ```
 
 La base y el rol deben crearse como administrador de PostgreSQL. El rol de la
@@ -100,9 +112,10 @@ ALTER ROLE docu_postgres_dev_user NOCREATEDB;
   --require-no-createdb
 ```
 
-`mssql-django` y `pyodbc` se conservan temporalmente para el entorno histórico,
-pero no son el backend oficial ni deben utilizarse para migraciones o pruebas
-de esta rama.
+La instalación oficial incluye únicamente el backend PostgreSQL. La rama
+histórica `DB_ENGINE=mssql` aún existe en `config/settings.py`, pero
+`mssql-django` y `pyodbc` ya no forman parte de `requirements.txt`; no debe
+seleccionarse ese motor en cPanel ni en las verificaciones de esta rama.
 
 ## Visualización técnica de documentos
 
