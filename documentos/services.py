@@ -6,6 +6,7 @@ from django.core.files.base import ContentFile
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.urls import reverse
+from django.utils import timezone
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from reportlab.lib.utils import ImageReader
@@ -41,6 +42,40 @@ _SQLITE_RESULT_LOCK = threading.Lock()
 
 class ResultadoPDFError(Exception):
     pass
+
+
+def registrar_visualizacion_destinatario(*, destinatario_id, usuario, request):
+    with transaction.atomic():
+        destinatario = (
+            DestinatarioDocumento.objects.select_for_update()
+            .select_related("envio")
+            .filter(
+                pk=destinatario_id,
+                usuario=usuario,
+                envio__estado=EnvioDocumento.Estado.ENVIADO,
+                estado__in=(
+                    DestinatarioDocumento.Estado.PENDIENTE,
+                    DestinatarioDocumento.Estado.VISTO,
+                    DestinatarioDocumento.Estado.FIRMADO,
+                ),
+            )
+            .first()
+        )
+        if destinatario is None:
+            return None, False
+        if destinatario.estado != DestinatarioDocumento.Estado.PENDIENTE:
+            return destinatario, False
+
+        destinatario.estado = DestinatarioDocumento.Estado.VISTO
+        destinatario.fecha_visualizacion = timezone.now()
+        destinatario.save(update_fields=("estado", "fecha_visualizacion"))
+        registrar_evento(
+            tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
+            envio=destinatario.envio,
+            request=request,
+            informacion_adicional={"destinatario_id": destinatario.pk},
+        )
+        return destinatario, True
 
 
 def envio_esta_completo(envio):

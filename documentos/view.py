@@ -423,40 +423,18 @@ def _respuesta_archivo_pdf(campo_archivo, nombre, como_adjunto=False):
 @login_required
 @require_GET
 def received_document_view(request, pk):
-    with transaction.atomic():
-        destinatario = get_object_or_404(
-            DestinatarioDocumento.objects.select_for_update().select_related(
-                "envio__documento"
-            ),
-            pk=pk,
-            usuario=request.user,
-            envio__estado=EnvioDocumento.Estado.ENVIADO,
-            estado__in=(
-                DestinatarioDocumento.Estado.PENDIENTE,
-                DestinatarioDocumento.Estado.VISTO,
-                DestinatarioDocumento.Estado.FIRMADO,
-            ),
-        )
-        documento = destinatario.envio.documento
-        # Verificar que el archivo exista antes de registrar la visualización:
-        # un archivo inaccesible no debe dejar un estado VISTO ni un evento.
-        if not documento.archivo:
-            raise Http404
-        try:
-            with documento.archivo.open("rb"):
-                pass
-        except OSError as error:
-            raise Http404 from error
-        if destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
-            destinatario.estado = DestinatarioDocumento.Estado.VISTO
-            destinatario.fecha_visualizacion = timezone.now()
-            destinatario.save(update_fields=("estado", "fecha_visualizacion"))
-            registrar_evento(
-                tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
-                envio=destinatario.envio,
-                request=request,
-                informacion_adicional={"destinatario_id": destinatario.pk},
-            )
+    destinatario = get_object_or_404(
+        DestinatarioDocumento.objects.select_related("envio__documento"),
+        pk=pk,
+        usuario=request.user,
+        envio__estado=EnvioDocumento.Estado.ENVIADO,
+        estado__in=(
+            DestinatarioDocumento.Estado.PENDIENTE,
+            DestinatarioDocumento.Estado.VISTO,
+            DestinatarioDocumento.Estado.FIRMADO,
+        ),
+    )
+    documento = destinatario.envio.documento
     return _respuesta_archivo_pdf(documento.archivo, documento.nombre_original)
 
 

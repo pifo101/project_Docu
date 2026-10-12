@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +12,11 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from auditoria.models import EventoAuditoria
 from auditoria.services import registrar_evento
 from documentos.models import CampoFirma, DestinatarioDocumento, EnvioDocumento
-from documentos.services import ResultadoPDFError, generar_resultado_si_completo
+from documentos.services import (
+    ResultadoPDFError,
+    generar_resultado_si_completo,
+    registrar_visualizacion_destinatario,
+)
 from .forms import FirmaForm, FirmaPerfilForm
 from .models import Firma, FirmaPerfil
 
@@ -148,6 +152,12 @@ def _render_documento_destinatario(
         "already_signed": already_signed,
         "show_result": show_result,
         "pdf_view_url": pdf_view_url,
+        "visualization_url": (
+            reverse("firmas:recipient_viewed", args=[destinatario.pk])
+            if not show_result
+            and destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE
+            else ""
+        ),
         "campo_firma": next(
             campo for campo in campos_firma if campo.tipo == CampoFirma.Tipo.FIRMA
         ),
@@ -211,6 +221,22 @@ def profile_signature_preview_view(request):
 
 
 @login_required
+@require_POST
+def recipient_viewed_view(request, pk):
+    destinatario, created = registrar_visualizacion_destinatario(
+        destinatario_id=pk,
+        usuario=request.user,
+        request=request,
+    )
+    if destinatario is None:
+        raise Http404
+    return JsonResponse({
+        "estado": destinatario.estado,
+        "registrada": created,
+    })
+
+
+@login_required
 @require_http_methods(["GET", "POST"])
 def recipient_sign_view(request, pk):
     destinatario = get_object_or_404(
@@ -245,44 +271,11 @@ def recipient_sign_view(request, pk):
         return redirect("documentos:user_completed")
     firma_perfil = FirmaPerfil.objects.filter(usuario=request.user).first()
     if request.method == "GET":
-        with transaction.atomic():
-            destinatario = get_object_or_404(
-                DestinatarioDocumento.objects.select_for_update().select_related(
-                    "envio__documento", "envio__remitente", "usuario"
-                ),
-                pk=pk,
-                usuario=request.user,
-                envio__estado=EnvioDocumento.Estado.ENVIADO,
-            )
-            if destinatario.estado == DestinatarioDocumento.Estado.FIRMADO or Firma.objects.filter(
-                destinatario=destinatario
-            ).exists():
-                ya_firmado = True
-            elif destinatario.estado == DestinatarioDocumento.Estado.PENDIENTE:
-                ya_firmado = False
-                destinatario.estado = DestinatarioDocumento.Estado.VISTO
-                destinatario.fecha_visualizacion = timezone.now()
-                destinatario.save(update_fields=("estado", "fecha_visualizacion"))
-                registrar_evento(
-                    tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
-                    envio=destinatario.envio,
-                    request=request,
-                    informacion_adicional={"destinatario_id": destinatario.pk},
-                )
-            elif destinatario.estado == DestinatarioDocumento.Estado.VISTO:
-                ya_firmado = False
-            else:
-                return redirect("documentos:user_pending")
-        if ya_firmado:
-            resultado = _intentar_generar_resultado(request, destinatario.envio_id)
-            return _render_documento_destinatario(
-                request,
-                destinatario,
-                campos_firma,
-                readonly=True,
-                already_signed=True,
-                show_result=resultado is not None,
-            )
+        if destinatario.estado not in (
+            DestinatarioDocumento.Estado.PENDIENTE,
+            DestinatarioDocumento.Estado.VISTO,
+        ):
+            return redirect("documentos:user_pending")
         form = FirmaForm()
     else:
         form = FirmaForm(request.POST)
@@ -319,11 +312,6 @@ def recipient_sign_view(request, pk):
                         campos_preparados = _validar_y_preparar_valores(
                             form, bloqueado, campos_bloqueados, completado_en
                         )
-                        visualizacion_nueva = (
-                            bloqueado.estado == DestinatarioDocumento.Estado.PENDIENTE
-                        )
-                        if bloqueado.estado == DestinatarioDocumento.Estado.PENDIENTE:
-                            bloqueado.fecha_visualizacion = timezone.now()
                         if not form.errors and form.cleaned_data["metodo"] == Firma.Metodo.PERFIL:
                             firma_perfil_bloqueada = (
                                 FirmaPerfil.objects.select_for_update()
@@ -356,14 +344,7 @@ def recipient_sign_view(request, pk):
                                     campos_preparados, ("valor", "fecha_completado")
                                 )
                             bloqueado.estado = DestinatarioDocumento.Estado.FIRMADO
-                            bloqueado.save(update_fields=("estado", "fecha_visualizacion"))
-                            if visualizacion_nueva:
-                                registrar_evento(
-                                    tipo=EventoAuditoria.Tipo.DOCUMENTO_VISUALIZADO,
-                                    envio=bloqueado.envio,
-                                    request=request,
-                                    informacion_adicional={"destinatario_id": bloqueado.pk},
-                                )
+                            bloqueado.save(update_fields=("estado",))
                             registrar_evento(
                                 tipo=EventoAuditoria.Tipo.FIRMA_COMPLETADA,
                                 envio=bloqueado.envio,

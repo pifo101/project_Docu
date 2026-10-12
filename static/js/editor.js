@@ -1,6 +1,7 @@
 const databaseName = "adicla-sign-editor";
 const storeName = "temporary-documents";
 const documentKey = "current-pdf";
+const editorRoot = document.querySelector(".editor-shell");
 const pdfDocumentElement = document.querySelector("[data-pdf-document]");
 const viewerState = document.querySelector("[data-viewer-state]");
 const documentName = document.querySelector("[data-document-name]");
@@ -814,9 +815,11 @@ async function prepareEditor() {
                 ...storedFields.fields,
             );
             updateRecipientPresentation();
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-            loadedPdf = await window.pdfjsLib.getDocument(editorShell.dataset.pdfUrl).promise;
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = editorRoot.dataset.pdfWorkerUrl;
+            loadedPdf = await window.pdfjsLib.getDocument({
+                url: editorShell.dataset.pdfUrl,
+                isEvalSupported: false,
+            }).promise;
             pdfDocumentElement.hidden = false;
             await renderPages();
             return;
@@ -837,9 +840,11 @@ async function prepareEditor() {
         documentFields.splice(0, documentFields.length, ...restoredFields.map((field) => ({ ...field, recipient: recipient.name })));
         documentName.textContent = temporaryDocument.name || temporaryDocument.file.name || "Documento PDF";
         pdfObjectUrl = URL.createObjectURL(temporaryDocument.file);
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-        loadedPdf = await window.pdfjsLib.getDocument(pdfObjectUrl).promise;
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = editorRoot.dataset.pdfWorkerUrl;
+        loadedPdf = await window.pdfjsLib.getDocument({
+            url: pdfObjectUrl,
+            isEvalSupported: false,
+        }).promise;
         pdfDocumentElement.hidden = false;
         await renderPages();
     } catch (error) {

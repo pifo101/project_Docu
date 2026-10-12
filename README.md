@@ -104,6 +104,49 @@ ALTER ROLE docu_postgres_dev_user NOCREATEDB;
 pero no son el backend oficial ni deben utilizarse para migraciones o pruebas
 de esta rama.
 
+## Visualización técnica de documentos
+
+Abrir la pantalla de firma, consultar el PDF o descargar un archivo mediante
+`GET` no modifica el estado del destinatario. La pantalla de firma registra la
+visualización con un `POST` a
+`/firma/destinatarios/<id>/visualizacion/` únicamente después de que PDF.js
+renderiza correctamente la primera página.
+
+El endpoint exige sesión autenticada y CSRF, comprueba que la asignación
+pertenezca al usuario y que el envío continúe activo, y bloquea la fila dentro
+de una transacción. Solo la primera solicitud cambia `PENDIENTE` a `VISTO`,
+conserva la primera `fecha_visualizacion` y crea un único evento
+`DOCUMENTO_VISUALIZADO`; las solicitudes posteriores son idempotentes. Un
+destinatario `FIRMADO` no retrocede ni genera una visualización tardía. Si el
+registro técnico falla, el visor no se bloquea y la firma directa conserva las
+reglas existentes.
+
+El evento confirma que el visor autenticado renderizó al menos una página. No
+demuestra que una persona haya leído o comprendido el documento.
+
+## PDF.js local
+
+El editor y la pantalla de firma utilizan PDF.js `3.11.174` desde
+`static/vendor/pdfjs/3.11.174/`, sin solicitar la librería ni el worker a un
+CDN. Se incorporan únicamente `pdf.min.js`, `pdf.worker.min.js` y `LICENSE`,
+obtenidos del paquete oficial verificable `pdfjs-dist@3.11.174`. PDF.js se
+distribuye bajo Apache License 2.0. La librería y el worker pertenecen a la
+misma versión, y las URLs del worker se generan con `{% static %}` para respetar
+`STATIC_URL` y posibles prefijos de despliegue. La integración desactiva la
+evaluación dinámica de fuentes mediante `isEvalSupported: false`.
+
+`STATIC_ROOT` puede configurarse con `DJANGO_STATIC_ROOT` y, por defecto, usa
+`staticfiles/`. En despliegue se debe ejecutar `collectstatic` y configurar el
+servidor web para servir ese directorio bajo `STATIC_URL`:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py collectstatic --noinput
+```
+
+Para una validación aislada, asigne `DJANGO_STATIC_ROOT` a un directorio
+temporal vacío antes de ejecutar el comando; no use como destino una carpeta
+productiva existente.
+
 ## Correo electrónico
 
 Actualmente el MVP no utiliza verificación de correo porque el entorno de

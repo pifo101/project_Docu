@@ -1,5 +1,6 @@
 (() => {
     const recipientViewer = document.querySelector("[data-recipient-viewer]");
+    const recipientConfig = document.querySelector("[data-recipient-config]");
     const recipientPages = document.querySelector("[data-recipient-pages]");
     const recipientPageStatus = document.querySelector("[data-recipient-page-status]");
     const fields = Array.from(document.querySelectorAll("[data-completable]"));
@@ -27,6 +28,26 @@
     let recipientRenderedWidth = 0;
     let recipientResizeTimer = null;
     let assignedPageFocused = false;
+    let visualizationRequested = false;
+
+    async function recordTechnicalVisualization() {
+        const visualizationUrl = recipientConfig?.dataset.visualizationUrl;
+        if (!visualizationUrl || visualizationRequested) return;
+        visualizationRequested = true;
+        try {
+            const response = await fetch(visualizationUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-CSRFToken": recipientConfig.dataset.csrfToken,
+                },
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            console.warn("No se pudo registrar la visualización técnica del PDF.", error);
+        }
+    }
 
     function readSignatureFields() {
         const element = document.getElementById("recipient-signature-fields");
@@ -147,8 +168,13 @@
         try {
             const pdfUrl = recipientViewer?.dataset.pdfUrl;
             if (!pdfUrl) return demo ? drawMockDocument() : showDocumentError();
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-            if (!recipientPdf) recipientPdf = await window.pdfjsLib.getDocument(pdfUrl).promise;
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = recipientConfig.dataset.pdfWorkerUrl;
+            if (!recipientPdf) {
+                recipientPdf = await window.pdfjsLib.getDocument({
+                    url: pdfUrl,
+                    isEvalSupported: false,
+                }).promise;
+            }
             const currentVersion = ++recipientRenderVersion;
             const availableWidth = Math.max(1, Math.min(720, recipientPages.clientWidth || 720));
             const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -172,6 +198,8 @@
                 canvas.width = Math.floor(renderViewport.width);
                 canvas.height = Math.floor(renderViewport.height);
                 await page.render({ canvasContext: canvas.getContext("2d"), viewport: renderViewport }).promise;
+                if (currentVersion !== recipientRenderVersion) return;
+                if (pageNumber === 1) void recordTechnicalVisualization();
             }
 
             if (currentVersion !== recipientRenderVersion) return;
