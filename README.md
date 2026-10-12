@@ -1,5 +1,20 @@
 # ADICLA Sign
 
+## Despliegue con Passenger en cPanel
+
+Configure la aplicación Python de cPanel con estos valores:
+
+- Application root: directorio donde se encuentra `manage.py`.
+- Startup file: `passenger_wsgi.py`.
+- Entry point: `application`.
+
+Passenger reutiliza directamente la aplicación definida en `config/wsgi.py`.
+Antes de iniciar o reiniciar la aplicación, configure las variables de entorno
+descritas en `.env.example`, con valores productivos para el dominio, la clave
+secreta y PostgreSQL. El entorno virtual seleccionado en cPanel debe tener
+instalado `requirements.txt`. Después de desplegar cambios, utilice la opción de
+reinicio de la aplicación proporcionada por cPanel.
+
 ## PostgreSQL local
 
 PostgreSQL es el motor oficial del proyecto. Django 5.2 requiere PostgreSQL 14
