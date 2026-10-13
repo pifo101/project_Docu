@@ -196,11 +196,47 @@ TIME_ZONE = "America/Guatemala"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = os.getenv("DJANGO_STATIC_URL", "/static/")
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT", BASE_DIR / "staticfiles"))
-MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = "/media/"
+
+media_root_setting = os.getenv("DJANGO_MEDIA_ROOT")
+if media_root_setting:
+    MEDIA_ROOT = Path(media_root_setting).expanduser()
+elif DEBUG:
+    MEDIA_ROOT = BASE_DIR / "media"
+else:
+    raise ImproperlyConfigured(
+        "DJANGO_MEDIA_ROOT must be set when DJANGO_DEBUG is disabled"
+    )
+
+if not DEBUG:
+    if not MEDIA_ROOT.is_absolute():
+        raise ImproperlyConfigured(
+            "DJANGO_MEDIA_ROOT must be an absolute path when DJANGO_DEBUG is disabled"
+        )
+
+    public_root_setting = os.getenv("DJANGO_PUBLIC_ROOT")
+    if not public_root_setting:
+        raise ImproperlyConfigured(
+            "DJANGO_PUBLIC_ROOT must be set when DJANGO_DEBUG is disabled"
+        )
+
+    public_root = Path(public_root_setting).expanduser()
+    if not public_root.is_absolute():
+        raise ImproperlyConfigured(
+            "DJANGO_PUBLIC_ROOT must be an absolute path when DJANGO_DEBUG is disabled"
+        )
+
+    try:
+        MEDIA_ROOT.resolve().relative_to(public_root.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ImproperlyConfigured(
+            "DJANGO_MEDIA_ROOT must be outside DJANGO_PUBLIC_ROOT"
+        )
 DOCUMENTO_MAX_FILE_SIZE = int(os.getenv("DOCUMENTO_MAX_FILE_SIZE", 20 * 1024 * 1024))
 FIRMA_PERFIL_MAX_FILE_SIZE = int(os.getenv("FIRMA_PERFIL_MAX_FILE_SIZE", 1024 * 1024))
 EMAIL_BACKEND = os.getenv(
