@@ -1,20 +1,42 @@
 # ADICLA Sign
 
-## PostgreSQL local
+Sistema de gestión, distribución interna y firma de documentos PDF para ADICLA.
+Está desarrollado con Python, Django 5.2, PostgreSQL, HTML, CSS y JavaScript.
+Utiliza Psycopg para la base de datos, PDF.js local para visualizar documentos,
+y pypdf y ReportLab para generar el PDF resultante. La entrega operativa es
+**local**; el despliegue en cPanel está pendiente.
 
-PostgreSQL es el motor oficial del proyecto. Django 5.2 requiere PostgreSQL 14
-o posterior; el entorno local validado utiliza PostgreSQL 17 y Psycopg 3 con
-la implementación binaria.
+## Ejecución local (Windows)
 
-Instale las dependencias dentro del entorno virtual:
+### Requisitos e instalación
+
+- Python: se recomienda usar el entorno validado con **3.14.6** para reproducir
+  la ejecución local comprobada. `requirements.txt` fija Django **5.2.17** y las
+  demás versiones utilizadas; la recomendación de Python 3.12 para cPanel no
+  sustituye esta referencia local.
+- PostgreSQL 14 o posterior; el entorno local documentado utiliza PostgreSQL 17.
+- Acceso a una base y un rol de PostgreSQL propios de la aplicación.
+
+Desde la raíz del proyecto, cree un entorno virtual si aún no existe e instale
+las dependencias con ese mismo intérprete (en Windows, con Python 3.14
+disponible mediante `py`):
 
 ```powershell
+py -3.14 -m venv .venv
+.\.venv\Scripts\python.exe --version
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-La base y el rol deben crearse como administrador de PostgreSQL. El rol de la
-aplicación debe ser propietario de su base y esquema, pero no debe conservar
-`SUPERUSER`, `CREATEDB` ni `CREATEROLE`:
+Si `.venv` ya existe, no es necesario recrearlo. Utilice siempre su
+`python.exe` en los comandos siguientes.
+
+### PostgreSQL y variables de entorno
+
+PostgreSQL es el motor oficial. La base y el rol deben crearse una sola vez como
+administrador de PostgreSQL, **solo si aún no existen**. El rol de la aplicación
+debe ser propietario de su base y esquema, sin conservar `SUPERUSER`, `CREATEDB`
+ni `CREATEROLE` durante el uso ordinario:
 
 ```sql
 CREATE ROLE docu_postgres_dev_user LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
@@ -26,8 +48,13 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE, CREATE ON SCHEMA public TO docu_postgres_dev_user;
 ```
 
-Configure `.env` a partir de `.env.example`. `DB_PASSWORD` debe contener la
-contraseña local del rol y nunca debe versionarse. Las variables de base son:
+Configure `.env` a partir de `.env.example` para la máquina local. `DB_ENGINE`,
+`DB_NAME`, `DB_USER` y `DB_PASSWORD` son obligatorios para PostgreSQL;
+`DB_PASSWORD` debe contener la contraseña del rol local, nunca versionada.
+`DJANGO_DEBUG=True` habilita el entorno de desarrollo. Use una clave secreta
+propia si establece `DJANGO_SECRET_KEY`; con debug desactivado es obligatoria.
+El ejemplo incluye los nombres de base y rol utilizados en el procedimiento
+anterior; ajústelos si su instalación usa otros:
 
 ```dotenv
 DB_ENGINE=postgresql
@@ -39,8 +66,15 @@ DB_PORT=5432
 DB_TEST_NAME=test_docu_postgres_dev
 ```
 
-Antes de cualquier migración o prueba, verifique la configuración efectiva y
-el destino que reporta el propio servidor:
+`DB_HOST` y `DB_PORT` son opcionales (por defecto `localhost` y `5432`);
+`DB_TEST_NAME` debe ser distinto de `DB_NAME`. `DJANGO_ALLOWED_HOSTS` puede
+contener `127.0.0.1,localhost` para el acceso local. Las demás variables
+opcionales y los ejemplos futuros para cPanel se describen en `.env.example`.
+No use sus rutas de hosting para ejecutar localmente.
+
+Antes de migrar o ejecutar pruebas, verifique el destino que reporta el propio
+servidor. Sustituya los nombres, host y puerto del comando si modificó el
+ejemplo; esta consulta no cambia el esquema:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\verify_postgresql_target.py `
@@ -53,7 +87,13 @@ el destino que reporta el propio servidor:
 
 El comando falla si el backend, vendor, base, host, puerto o nombre de prueba
 no son los esperados. Para una base nueva se puede añadir
-`--require-empty-schema`. Después de verificar el destino:
+`--require-empty-schema`; no lo use sobre una base ya migrada.
+
+### Migraciones y primer administrador
+
+Compruebe la configuración y aplique las migraciones **únicamente sobre la
+base prevista**, tras verificar el destino. Las migraciones incluyen los cargos
+y comités oficiales iniciales:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py check
@@ -65,11 +105,35 @@ no son los esperados. Para una base nueva se puede añadir
   --inspect-schema
 ```
 
-### Pruebas seguras
+Si todavía no existe una cuenta administradora, créela con:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py createsuperuser
+```
+
+El modelo de usuario solicita correo institucional, nombre, apellido, comité
+y cargo, además de la contraseña. Seleccione un comité y cargo existentes
+después de migrar. No comparta ni incluya la contraseña en la documentación.
+Para gestores no superusuarios, asigne `is_staff` y los permisos específicos
+desde una cuenta administradora autorizada (véase más abajo).
+
+### Iniciar y acceder
+
+```powershell
+.\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+```
+
+Abra `http://127.0.0.1:8000/` (redirige al acceso o al panel, según la sesión).
+El acceso administrativo está en `http://127.0.0.1:8000/admin/` y requiere
+`is_staff` y los permisos correspondientes. Detenga el servidor con `Ctrl+C`.
+
+### Pruebas en una base temporal
 
 Django crea y elimina `test_docu_postgres_dev`; nunca utiliza
 `docu_postgres_dev` como base de pruebas. El rol de desarrollo recibe
-`CREATEDB` solo durante la ejecución de la suite:
+`CREATEDB` **solo temporalmente** durante la ejecución de la suite. Revise
+primero que `DB_TEST_NAME` no coincida con `DB_NAME` y que la base de prueba no
+exista. Como administrador de PostgreSQL:
 
 ```sql
 ALTER ROLE docu_postgres_dev_user CREATEDB;
@@ -100,9 +164,35 @@ ALTER ROLE docu_postgres_dev_user NOCREATEDB;
   --require-no-createdb
 ```
 
-`mssql-django` y `pyodbc` se conservan temporalmente para el entorno histórico,
-pero no son el backend oficial ni deben utilizarse para migraciones o pruebas
-de esta rama.
+### Archivos estáticos y multimedia
+
+Con `DJANGO_DEBUG=True`, `runserver` sirve los estáticos de `static/`, incluido
+PDF.js. Los PDF cargados se almacenan por defecto en `media/` y se consultan a
+través de vistas autenticadas; no publique `MEDIA_ROOT` directamente. Las
+firmas de perfil se conservan en la base de datos. `STATIC_ROOT` usa
+`staticfiles/` por defecto y puede configurarse con `DJANGO_STATIC_ROOT` para
+un despliegue posterior. En ese caso, ejecute `collectstatic` y configure el
+servidor web para servir el directorio bajo `STATIC_URL`:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py collectstatic --noinput
+```
+
+Para una validación aislada, asigne `DJANGO_STATIC_ROOT` a un directorio
+temporal vacío; no use como destino una carpeta productiva existente.
+
+### Limitaciones conocidas
+
+- La entrega operativa es local. El enrutamiento de LiteSpeed/Passenger con
+  WordPress impide dar por completado el despliegue en cPanel.
+- El MVP no verifica el correo ni envía notificaciones reales. La recuperación
+  de contraseña y el rechazo de documentos no forman parte del flujo real.
+- El registro público permite escoger los cinco cargos, incluidos presidente
+  y secretario, con efecto funcional inmediato; consulte el riesgo aceptado
+  en la sección de administración.
+- La instalación oficial incluye únicamente el backend PostgreSQL. La rama
+  histórica `DB_ENGINE=mssql` permanece en `config/settings.py`, pero
+  `mssql-django` y `pyodbc` no están en `requirements.txt`.
 
 ## Visualización técnica de documentos
 
@@ -135,17 +225,8 @@ misma versión, y las URLs del worker se generan con `{% static %}` para respeta
 `STATIC_URL` y posibles prefijos de despliegue. La integración desactiva la
 evaluación dinámica de fuentes mediante `isEvalSupported: false`.
 
-`STATIC_ROOT` puede configurarse con `DJANGO_STATIC_ROOT` y, por defecto, usa
-`staticfiles/`. En despliegue se debe ejecutar `collectstatic` y configurar el
-servidor web para servir ese directorio bajo `STATIC_URL`:
-
-```powershell
-.\.venv\Scripts\python.exe manage.py collectstatic --noinput
-```
-
-Para una validación aislada, asigne `DJANGO_STATIC_ROOT` a un directorio
-temporal vacío antes de ejecutar el comando; no use como destino una carpeta
-productiva existente.
+La configuración de estáticos y `collectstatic` se describe en la sección de
+ejecución local; el servidor de desarrollo sirve los archivos desde `static/`.
 
 ## Correo electrónico
 
@@ -234,3 +315,31 @@ funcionales. El riesgo permanece abierto y no constituye una autorización de
 seguridad adicional. Como mitigación futura se recomienda verificación real de
 identidad institucional, invitaciones o revisión previa para cargos directivos,
 sin que esas medidas formen parte del alcance actual.
+
+## Despliegue futuro — Pendiente de implementación
+
+La configuración para Passenger/cPanel se conserva para un posible despliegue
+posterior. **No es la modalidad de entrega operativa**: quedan pendientes la
+resolución del enrutamiento con LiteSpeed/Passenger y WordPress y su validación
+completa en el hosting.
+
+La aplicación Python de cPanel usaría el directorio de `manage.py` como
+*Application root*, `passenger_wsgi.py` como *Startup file* y `application`
+como *Entry point*. Passenger reutiliza `config/wsgi.py`. Para ese entorno se
+recomienda Python 3.12 y un entorno virtual propio. Instale las dependencias
+fijadas con el mismo intérprete que ejecutaría Passenger:
+
+```bash
+python --version
+python -m pip install -r requirements.txt
+python -m pip check
+```
+
+Antes de activar ese despliegue futuro habrá que definir variables de entorno
+de producción (`DJANGO_DEBUG=False`, clave secreta, hosts, orígenes CSRF y
+PostgreSQL), `DJANGO_STATIC_ROOT`, `DJANGO_PUBLIC_ROOT` y un
+`DJANGO_MEDIA_ROOT` absoluto fuera del directorio público. Habrá que ejecutar
+`collectstatic`, servir los estáticos bajo `DJANGO_STATIC_URL` y utilizar el
+reinicio de aplicación de cPanel tras cambios. `.env.example` solo contiene
+referencias comentadas para esas rutas; los valores efectivos dependerán del
+hosting. Estas instrucciones no acreditan que cPanel ya funcione.
